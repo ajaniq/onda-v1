@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ONDA</title>
+<style>
+  html[data-theme="dark"]{
+    --bg:#1b1b1b; --panel:#272727; --panel2:#2f2f2f; --inset:#1e1e1e;
+    --line:#383838; --line2:#454545; --text:#d3d3d3; --muted:#8b8b8b;
+    --accent:#5f95cf; --accent-ink:#ffffff; --sel:#324f6d; --row:#222222;
+    --rowhover:#2a2a2a; --play:#161616; --star:#f0c040; --bad:#e06666; --good:#6fbf73;
+  }
+  html[data-theme="light"]{
+    --bg:#c4c4c4; --panel:#d2d2d2; --panel2:#c9c9c9; --inset:#bdbdbd;
+    --line:#a9a9a9; --line2:#9a9a9a; --text:#1d1d1d; --muted:#5d5d5d;
+    --accent:#3a6ea5; --accent-ink:#ffffff; --sel:#a9c4de; --row:#cccccc;
+    --rowhover:#c0c8d0; --play:#b6b6b6; --star:#b8860b; --bad:#b23a3a; --good:#3f8a48;
+  }
+  html[data-theme="midnight"]{
+    --bg:#15181f; --panel:#1e2330; --panel2:#252b39; --inset:#12151c;
+    --line:#2b3340; --line2:#384355; --text:#cdd3dc; --muted:#7d8794;
+    --accent:#5f87b8; --accent-ink:#ffffff; --sel:#2e3f57; --row:#191d26;
+    --rowhover:#222838; --play:#10131a; --star:#e6c265; --bad:#e06666; --good:#6fbf73;
+  }
+  html[data-theme="moss"]{
+    --bg:#181b17; --panel:#222721; --panel2:#2a3028; --inset:#141611;
+    --line:#313a2e; --line2:#3e4a39; --text:#d0d4c8; --muted:#838b7c;
+    --accent:#7fa06a; --accent-ink:#10140e; --sel:#2f3a2a; --row:#1c201a;
+    --rowhover:#262d23; --play:#121410; --star:#d8b85c; --bad:#cf6a6a; --good:#7fa06a;
+  }
+  html[data-theme="plum"]{
+    --bg:#1b181f; --panel:#262230; --panel2:#2e2939; --inset:#171420;
+    --line:#352f3f; --line2:#43394f; --text:#d4cdda; --muted:#8b8194;
+    --accent:#9b7fb8; --accent-ink:#1a1620; --sel:#352c44; --row:#201c28;
+    --rowhover:#2a2535; --play:#15121b; --star:#d8b85c; --bad:#d06a6a; --good:#74b07a;
+  }
+  html[data-theme="sand"]{
+    --bg:#1d1a16; --panel:#272320; --panel2:#312b25; --inset:#181410;
+    --line:#39332c; --line2:#4a4137; --text:#dad2c6; --muted:#938a7c;
+    --accent:#c2935a; --accent-ink:#1a1410; --sel:#3d3327; --row:#221e19;
+    --rowhover:#2c2721; --play:#171410; --star:#d8b85c; --bad:#d06a6a; --good:#82a86a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;display:flex;flex-direction:column;height:100vh;overflow:hidden;
+       font:13px/1.5 "Helvetica Neue",Arial,system-ui,sans-serif;
+       background:var(--bg);color:var(--text);letter-spacing:.1px}
+  .mono{font-family:"SF Mono",Menlo,Consolas,monospace}
+  header{display:flex;gap:9px;align-items:center;padding:10px 14px;background:var(--panel);
+         border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+  .brand{font-weight:700;font-size:14px;letter-spacing:.28em;text-transform:uppercase;color:var(--text);display:flex;align-items:center;gap:8px}
+  .brand img{height:20px;width:20px;border-radius:4px;display:block}
+  header .path{color:var(--muted);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  button{background:var(--panel2);color:var(--text);border:1px solid var(--line2);
+         padding:7px 11px;border-radius:3px;cursor:pointer;font-size:12px;letter-spacing:.02em}
+  button:hover{border-color:var(--accent)}
+  button:disabled{opacity:.4;cursor:default} button:disabled:hover{border-color:var(--line2)}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  button.go{background:transparent;border-color:var(--accent);color:var(--accent);font-weight:600}
+  button.link{background:transparent;border:none;color:var(--muted)}
+  .usbbox{display:flex;align-items:center;gap:5px;background:var(--inset);border:1px solid var(--line);
+          padding:3px 5px 3px 8px;border-radius:3px}
+  .usbbox label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  input,select,textarea{background:var(--inset);color:var(--text);border:1px solid var(--line2);
+         border-radius:3px;padding:6px 8px;font-size:12px}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  /* checkboxes: app-blue fill, slightly larger everywhere except the sidebar */
+  input[type=checkbox]{accent-color:#5F95CF;width:16px;height:16px;vertical-align:middle;cursor:pointer}
+  aside input[type=checkbox]{width:13px;height:13px}
+  /* flatten the glossy native dropdowns */
+  select{-webkit-appearance:none;appearance:none;
+    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="9" height="6"><path d="M0 0l4.5 6L9 0z" fill="%238b8b8b"/></svg>');
+    background-repeat:no-repeat;background-position:right 7px center;padding-right:22px}
+  .switch{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+  .layout{flex:1;min-height:0;display:flex}
+  aside{width:228px;flex:none;background:var(--panel);border-right:1px solid var(--line);padding:14px;overflow:auto}
+  aside h3{margin:14px 0 6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  aside h3:first-child{margin-top:0}
+  .sbsec h3{cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none}
+  .sbsec h3::before{content:'▾';font-size:9px;color:var(--muted)}
+  .sbsec.collapsed h3::before{content:'▸'}
+  .sbsec.collapsed .sbbody{display:none}
+  .frow{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .frow .xdel{color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px}
+  .frow .xdel:hover{color:var(--bad)}
+  .chk{display:block;margin:3px 0;font-size:12px;cursor:pointer}
+  .chk input{vertical-align:middle;margin-right:6px}
+  .rangeRow{display:flex;align-items:center;gap:6px}
+  .rangeRow input{width:70px}
+  main{flex:1;overflow:auto;min-width:0}
+  .toolbar{display:flex;gap:9px;align-items:center;padding:9px 14px;color:var(--muted);
+           border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:20;flex-wrap:wrap}
+  table{border-collapse:collapse;width:100%}
+  th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:middle}
+  thead th{position:sticky;top:46px;background:var(--panel);font-size:10px;letter-spacing:.1em;
+     text-transform:uppercase;color:var(--muted);z-index:10;font-weight:600}
+  th.sortable{cursor:pointer;user-select:none} th.sortable:hover{color:var(--text)}
+  th.sorted{color:var(--accent)}
+  tbody tr{background:var(--row)}
+  tbody tr:hover td{background:var(--rowhover)}
+  tr.playing td{background:var(--sel)}
+  tr.playing{box-shadow:inset 3px 0 0 var(--accent)}
+  td input.cell{width:100%;min-width:78px;background:transparent;border:1px solid transparent;border-radius:2px}
+  td input.cell:hover{border-color:var(--line2)}
+  td input.cell:focus{background:var(--inset);border-color:var(--accent)}
+  td .tin{font-weight:600}
+  td .ain{font-size:12px;color:var(--muted);margin-top:2px}
+  td select.cell{width:64px;background-color:transparent;border:1px solid transparent}
+  td select.cell:hover{border-color:var(--line2)}
+  .play{background:var(--panel2);border:1px solid var(--line2);border-radius:3px;width:30px;height:28px;
+        padding:0;font-size:12px;cursor:pointer;color:var(--accent)}
+  .play:hover{border-color:var(--accent)}
+  .play.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .coverbox{position:relative;width:36px;height:36px}
+  .cover{position:absolute;inset:0;width:36px;height:36px;object-fit:cover;border-radius:3px;z-index:1;background:var(--inset)}
+  .cover.nope{display:none}
+  .coverbox .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+       background:var(--inset);border:1px solid var(--line2);border-radius:3px;color:var(--muted);font-size:15px}
+  .stars{white-space:nowrap;font-size:16px;cursor:pointer;color:var(--line2);user-select:none}
+  .stars .on{color:var(--star)}
+  .tagcell{min-width:140px}
+  .pill{display:inline-block;background:var(--inset);border:1px solid var(--line2);color:var(--text);
+        border-radius:2px;padding:0 6px;font-size:11px;margin:1px 2px}
+  .keychip{display:inline-block;border-radius:3px;padding:1px 8px;font-size:11px;font-family:"SF Mono",Menlo,monospace}
+  .usbdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
+  .crate{display:flex;align-items:center;gap:5px;padding:3px 4px;border-radius:3px;font-size:12px}
+  .crate:hover{background:var(--rowhover)}
+  .crate.dragover{background:var(--sel);outline:1px dashed var(--accent)}
+  .crate .cname{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);cursor:default}
+  .crate .ctw{width:12px;flex:none;text-align:center;cursor:pointer;color:var(--muted);font-size:9px}
+  .crate .cact{color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px}
+  .crate .cact:hover{color:var(--accent)}
+  tbody tr[draggable="true"]{cursor:grab}
+  #usbBox.dragover{outline:2px dashed var(--accent)}
+  .usbbox.candrop{outline:1px dashed var(--line2)}
+  .genrewrap{display:flex;gap:3px;align-items:center;min-width:140px}
+  .genrewrap input{flex:1}
+  .gbtn{padding:5px 8px;line-height:1}
+  .usbtag{display:inline-block;font-size:10px;color:var(--muted);margin-top:2px;letter-spacing:.04em}
+  .fname{font-size:11px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .mini{font-size:9px;padding:1px 6px;border-radius:2px;color:var(--accent);background:transparent;border:1px solid var(--line2);cursor:pointer}
+  .lowbr{font-size:10px;font-weight:600;color:#e06666;background:rgba(224,102,102,.18);border:1px solid rgba(224,102,102,.42);border-radius:2px;padding:0 5px}
+  .hibr{font-size:10px;font-weight:600;color:#4cae58;background:rgba(86,180,99,.20);border:1px solid rgba(86,180,99,.5);border-radius:2px;padding:0 5px}
+  .br0{font-size:10px;color:var(--muted);background:var(--inset);border:1px solid var(--line2);border-radius:2px;padding:0 5px}
+  .muted{color:var(--muted)} .ro{color:var(--muted)}
+  .empty{padding:60px;text-align:center;color:var(--muted)}
+  .count{font-weight:600;color:var(--text);font-size:11px} .spacer{flex:1}
+  .toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--panel2);
+         border:1px solid var(--line2);padding:8px 14px;border-radius:3px;opacity:0;transition:.2s;z-index:95;max-width:80vw;font-size:11px}
+  .toast.show{opacity:1}
+  .menu{position:fixed;z-index:80;background:var(--panel);border:1px solid var(--line2);
+    border-radius:3px;padding:4px;max-height:320px;overflow:auto;display:none;min-width:180px;box-shadow:0 8px 22px rgba(0,0,0,.45)}
+  #genreMenu .gi{display:flex;align-items:center;justify-content:space-between;border-radius:2px;font-size:12px}
+  #genreMenu .gi .gname{flex:1;padding:6px 8px;cursor:pointer}
+  #genreMenu .gi:hover{background:var(--sel)}
+  #genreMenu .gi .gdel{padding:6px 8px;color:var(--muted);cursor:pointer}
+  #genreMenu .gi .gdel:hover{color:var(--bad)}
+  #genreMenu .none{color:var(--muted);padding:6px 8px;font-size:11px}
+  #colMenu .ci{display:block;padding:5px 8px;font-size:12px;cursor:pointer;border-radius:2px}
+  #colMenu .ci:hover{background:var(--sel)}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100}
+  .dialog{background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:18px;width:300px;display:flex;flex-direction:column;gap:8px;max-height:88vh;overflow:auto}
+  .dialog h4{margin:0 0 2px;font-size:13px} .dialog button{width:100%}
+  .dialog .ref{text-align:left;font-size:12px;line-height:1.55;max-height:46vh;overflow:auto;width:100%}
+  #gcBody{max-height:30vh} #gcManual{max-height:20vh!important}
+  .dialog .ref h5{margin:12px 0 4px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+  .dialog .ref .r{display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--line)}
+  .dialog .ref .r b{flex:none;width:104px;color:var(--text)}
+  .dialog .ref .r span{color:var(--muted)}
+  .tour-highlight{box-shadow:0 0 0 3px var(--accent),0 0 0 9999px rgba(0,0,0,.55)!important;border-radius:5px;position:relative;z-index:101}
+  #tourTip{position:fixed;z-index:120;background:var(--panel);border:1px solid var(--accent);border-radius:8px;
+    padding:14px;width:280px;box-shadow:0 10px 30px rgba(0,0,0,.5);display:none}
+  #tourTip h4{margin:0 0 6px;font-size:13px;color:var(--accent)}
+  #tourTip p{margin:0 0 12px;font-size:12px;line-height:1.5;color:var(--text)}
+  #tourTip .row{display:flex;align-items:center;gap:8px}
+  #tourTip .step{font-size:11px;color:var(--muted);margin-right:auto}
+  .mini2{font-size:9px;padding:1px 6px;border-radius:2px;color:var(--muted);background:transparent;border:1px solid var(--line2);cursor:pointer}
+  .mini2:hover{border-color:var(--accent);color:var(--accent)}
+  tr.hiddenrow td{opacity:.5}
+  .playerbar{flex:none;height:52px;background:var(--play);border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:14px;padding:0 14px}
+  .playerbar .np{min-width:170px;max-width:300px;overflow:hidden}
+  .playerbar .np .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+  .playerbar .np .a{color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #player{display:none}
+  .pbbtn{background:var(--panel2);border:1px solid var(--line2);border-radius:50%;width:32px;height:32px;color:var(--accent);cursor:pointer;font-size:12px;flex:none}
+  .pbbtn:hover{border-color:var(--accent)}
+  .pbtime{font-size:11px;color:var(--muted);font-family:"SF Mono",Menlo,monospace;min-width:36px;text-align:center;flex:none}
+  .pbseek{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;background:var(--line2);outline:none;cursor:pointer}
+  .pbseek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer;border:none}
+  .pbseek::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:none;cursor:pointer}
+  .crate .cfolder{color:var(--accent);display:flex;align-items:center;flex:none}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand"><img src="/logo" alt="ONDA" onerror="this.style.display='none'">ONDA</span>
+  <button class="primary" onclick="pickFolder()" title="Pick a music folder to load — your files are only read, never changed">Add Folder…</button>
+  <div class="usbbox" id="srcBox"><label>Folder</label>
+    <select id="srcSel" onchange="setSource()" title="View all folders at once, or one folder at a time"><option value="">All folders</option></select>
+    <button onclick="removeSource()" title="Remove the selected folder from the library (files stay on disk)">✕</button>
+  </div>
+  <button onclick="rescan()" id="rescanBtn" disabled title="Re-read all loaded folders to pick up changes">Rescan</button>
+  <button onclick="undo()" id="undoBtn" disabled title="Undo the last change">↩ Undo</button>
+  <span class="spacer"></span>
+  <div class="usbbox" id="usbBox" ondragover="usbOver(event)" ondragleave="document.getElementById('usbBox').classList.remove('dragover')" ondrop="usbDrop(event)">
+    <label>USB</label>
+    <select id="usbSel" onchange="setActiveUsb()" title="Choose which USB crate is active"><option value="">(none)</option></select>
+    <button onclick="newUsb()" title="Create a new USB crate (new folder or an existing one)">＋</button>
+    <button onclick="removeUsb()" title="Forget this USB (folder stays on disk)">✕</button>
+  </div>
+  <button onclick="toggleTheme()" id="themeBtn" title="Quick switch light / dark">☀</button>
+  <button onclick="openSettings()" id="settingsBtn" title="Settings (themes)">⚙</button>
+  <button onclick="openHelp()" id="helpBtn" title="Help &amp; tutorial">?</button>
+  <input id="search" placeholder="Search…" oninput="render()" title="Filter by title, artist, filename, notes or tags" style="width:110px">
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="sbsec" data-sec="crates"><h3 onclick="toggleSec('crates')">Crates · drag tracks here</h3><div class="sbbody">
+      <button onclick="newCrate()" style="width:100%;margin-bottom:6px" title="Make a crate folder (or add an existing one), then drag tracks onto it">＋ New crate</button>
+      <div id="crateTree"></div></div></div>
+    <div class="sbsec" data-sec="genre"><h3 onclick="toggleSec('genre')">Genre</h3><div class="sbbody">
+      <button id="gcleanBtn" onclick="openGenreClean()" style="width:100%;margin-bottom:8px" title="Review &amp; merge duplicate genre spellings, or manually combine genres — always asks before changing">🧹 Clean genres…</button>
+      <div id="fGenre"></div></div></div>
+    <div class="sbsec" data-sec="energy"><h3 onclick="toggleSec('energy')">Energy</h3><div class="sbbody">
+      <div class="rangeRow"><input type="number" id="eMin" min="0" max="10" placeholder="min" oninput="render()">
+        <span>–</span><input type="number" id="eMax" min="0" max="10" placeholder="max" oninput="render()"></div></div></div>
+    <div class="sbsec" data-sec="rating"><h3 onclick="toggleSec('rating')">Min rating</h3><div class="sbbody">
+      <div class="stars" id="fRating"></div></div></div>
+    <div class="sbsec" data-sec="bpm"><h3 onclick="toggleSec('bpm')">BPM</h3><div class="sbbody">
+      <div class="rangeRow"><input type="number" id="bMin" placeholder="min" oninput="render()">
+        <span>–</span><input type="number" id="bMax" placeholder="max" oninput="render()"></div></div></div>
+    <div class="sbsec" data-sec="key"><h3 onclick="toggleSec('key')">Key</h3><div class="sbbody"><div id="fKey"></div></div></div>
+    <div class="sbsec" data-sec="tags"><h3 onclick="toggleSec('tags')">Tags</h3><div class="sbbody"><div id="fTags"></div></div></div>
+    <button onclick="clearFilters()" style="width:100%;margin-top:10px">Clear filters</button>
+  </aside>
+
+  <main>
+    <div class="toolbar">
+      <label class="chk"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> Select all shown</label>
+      <label class="chk" title="Show only the tracks you've selected"><input type="checkbox" id="showSel" onchange="toggleShowSelected()"> Show selected</label>
+      <label class="chk" title="Show tracks you've hidden (they jump to the top) so you can unhide them"><input type="checkbox" id="showHidden" onchange="toggleShowHidden()"> Show hidden</label>
+      <span class="count" id="count">0 tracks</span>
+      <span class="spacer"></span>
+      <button id="colsBtn" onclick="openColMenu(event)" title="Show or hide table columns">Columns ▾</button>
+      <button onclick="addField()" title="Add your own column (e.g. Mood, Vibe, Set position)">+ Field</button>
+      <button onclick="manageFields()" title="Remove a custom field">Manage fields</button>
+      <button onclick="sendSelected()" title="File the selected tracks into the active USB by genre">▸ Send → USB</button>
+      <button class="go" onclick="exportSelected()" title="Copy the selected tracks into a brand-new folder (for a set)">Copy → folder</button>
+    </div>
+    <div id="tableWrap"><div class="empty"><div style="font-size:15px;color:var(--text);margin-bottom:6px">No music loaded yet</div>Click <b>Add Folder…</b> at the top-left to pick a music folder.<br>Your files aren’t changed — ONDA just reads them so you can tag, preview, and sort.</div></div>
+  </main>
+</div>
+
+<div id="genreMenu" class="menu"></div>
+<div id="colMenu" class="menu"></div>
+
+<div id="welcome" class="overlay" style="display:none">
+  <div class="dialog" style="width:390px;align-items:center;text-align:center">
+    <img src="/logo" style="width:64px;height:64px;border-radius:13px" onerror="this.style.display='none'">
+    <h4 style="font-size:16px;letter-spacing:.18em;margin:4px 0">ONDA</h4>
+    <p class="muted" style="font-size:12px;line-height:1.6;text-align:left">Tag your tracks (genre, energy, key, rating, notes…), preview them with a player, and build genre-sorted <b>USB</b> crates for your sets.<br><br>ONDA reads your music and saves tags into the files — it never deletes your music. Sending to a USB <b>copies</b> by default, so your originals stay safe (you can switch to Move anytime).</p>
+    <button class="primary" style="width:100%" onclick="welcomeStart()">Get Started — show me around</button>
+    <button class="link" style="width:100%" onclick="welcomeSkip()">Skip the tutorial</button>
+  </div>
+</div>
+
+<div id="settings" class="overlay" style="display:none">
+  <div class="dialog" style="width:340px;align-items:stretch;text-align:left">
+    <h4 style="margin:0">Settings</h4>
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;margin-top:4px">Theme
+      <select id="themeSel" onchange="setTheme(this.value)" style="flex:1;max-width:190px">
+        <option value="dark">Graphite (dark)</option>
+        <option value="light">Daylight (light)</option>
+        <option value="midnight">Midnight</option>
+        <option value="moss">Moss</option>
+        <option value="plum">Plum</option>
+        <option value="sand">Sand</option>
+      </select>
+    </label>
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px">Key notation
+      <select id="setKeyMode" onchange="setKeyModeVal(this.value)" style="flex:1;max-width:190px">
+        <option value="camelot">Camelot (8A)</option><option value="standard">Standard (Am)</option></select>
+    </label>
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px">USB action
+      <select id="setUsbMode" onchange="setUsbModeVal(this.value)" style="flex:1;max-width:190px">
+        <option value="copy">Copy (keep originals)</option><option value="move">Move (relocate)</option></select>
+    </label>
+    <label class="chk" style="font-size:13px"><input type="checkbox" id="setAutoFile" onchange="setAutoFileVal(this.checked)"> Auto-file into USB when I set a genre</label>
+    <button onclick="closeSettings()" style="margin-top:6px">Close</button>
+  </div>
+</div>
+
+<div id="help" class="overlay" style="display:none">
+  <div class="dialog" style="width:460px;align-items:stretch;text-align:left">
+    <div style="display:flex;align-items:center;gap:8px"><img src="/logo" style="width:28px;height:28px;border-radius:6px" onerror="this.style.display='none'"><h4 style="margin:0;letter-spacing:.16em">ONDA HELP</h4></div>
+    <button class="primary" onclick="closeHelp();startTour()">▶ Start the walkthrough</button>
+    <div class="ref">
+      <h5>Top bar</h5>
+      <div class="r"><b>Add Folder…</b><span>Load a music folder. Files are only read, never changed.</span></div>
+      <div class="r"><b>Folder ▾ / ✕</b><span>View all folders or one at a time; ✕ removes the selected folder from the library (files stay on disk).</span></div>
+      <div class="r"><b>USB ▾ ＋ ✕</b><span>Choose the active USB crate; ＋ makes one (new or existing folder); ✕ forgets it.</span></div>
+      <div class="r"><b>⚙ Settings</b><span>Theme, key notation (Camelot 8A ↔ standard Am), USB Copy vs Move, and Auto-file by genre.</span></div>
+      <div class="r"><b>☀ / ☾ · ↩ Undo</b><span>Quick light/dark · undo your last change.</span></div>
+      <h5>Toolbar</h5>
+      <div class="r"><b>Show selected / Show hidden</b><span>Show only your selected tracks · or reveal hidden tracks (they jump to the top) to unhide them.</span></div>
+      <div class="r"><b>Sidebar sections</b><span>Click a sidebar heading (Genre, Energy, Rating, BPM, Key, Tags) to collapse or expand it.</span></div>
+      <div class="r"><b>Crates (drag &amp; drop)</b><span>Make crate folders in the sidebar, then drag tracks (one or many selected) onto a crate — or onto the USB box — to copy/move them (per your Copy/Move setting). Crates are real folders with sub-folders.</span></div>
+      <div class="r"><b>Columns ▾ · + Field</b><span>Show/hide columns · add your own column (Mood, Set position…).</span></div>
+      <div class="r"><b>Send → USB · Copy → folder</b><span>File selected tracks into the active USB · copy them into a new folder for a set.</span></div>
+      <div class="r"><b>Clean genres…</b><span>Finds duplicate genre spellings (JerseyClub = Jersey Club) and <i>asks you</i> before merging. Has a Manual Merge to combine any genres you pick into one name. Re-open anytime — it updates as you add folders.</span></div>
+      <h5>On each track</h5>
+      <div class="r"><b>▶ · Title · Genre ▾</b><span>Preview · editing title renames the file · type or pick a genre.</span></div>
+      <div class="r"><b>▸ USB · ⊙ Finder · Hide</b><span>File to USB · reveal in Finder · hide from the list.</span></div>
+      <div class="r"><b>Sort</b><span>Click a column header: ascending → descending → original order.</span></div>
+      <h5>FAQ</h5>
+      <div class="r"><b>Does it harm files?</b><span>No deletions. It writes tags into files; "Move" relocates them, but USB defaults to Copy so originals stay.</span></div>
+      <div class="r"><b>Where are tags saved?</b><span>In each file, plus ~/Library/Application Support/ONDA — so updates never lose your library.</span></div>
+    </div>
+    <button onclick="closeHelp()">Close</button>
+  </div>
+</div>
+
+<div id="genreClean" class="overlay" style="display:none">
+  <div class="dialog" style="width:500px;align-items:stretch;text-align:left">
+    <h4 style="margin:0">Clean up genres</h4>
+    <p class="muted" style="font-size:11px;margin:2px 0;line-height:1.5"><b style="color:var(--text)">Pre-checked (auto)</b> = real spelling duplicates: differences in spacing, punctuation, <i>(notes)</i>, or known abbreviations — e.g. JerseyClub=Jersey Club, SPEED GARAGE (ISH)=Speed Garage, DnB=Drum&nbsp;&amp;&nbsp;Bass.<br><b style="color:var(--text)">Unchecked (your OK needed)</b> = capitalization-only changes (WORLD→World, HOUSE→House) and look-alikes. Sub-genres are never merged into parents. Edit the “→” name for any group.</p>
+    <div id="gcBody" class="ref"></div>
+    <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Manually combine — check any genres below, then type the name they should all become:</div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">Into:&nbsp;<input id="gcManualTo" placeholder="e.g. Speed Garage" style="flex:1"></div>
+      <div id="gcManual" class="ref" style="max-height:24vh"></div>
+    </div>
+    <label class="chk" title="Default off"><input type="checkbox" id="gcRefile"> Also re-file matching tracks inside USBs</label>
+    <div style="display:flex;gap:8px;margin-top:4px"><button class="link" style="flex:1" onclick="closeGenreClean()">Cancel</button>
+      <button class="primary" style="flex:1" onclick="applyGenreClean()">Apply</button></div>
+  </div>
+</div>
+
+<div id="tourTip">
+  <h4 id="tourTitle"></h4><p id="tourText"></p>
+  <div class="row"><span class="step" id="tourStepN"></span>
+    <button class="link" onclick="endTour()">Skip</button>
+    <button id="tourBack" onclick="tourGo(-1)">Back</button>
+    <button class="primary" id="tourNext" onclick="tourGo(1)">Next</button></div>
+</div>
+
+<div id="usbModal" class="overlay" style="display:none">
+  <div class="dialog">
+    <h4>Add USB <span id="usbModalName" class="muted"></span></h4>
+    <button class="primary" onclick="usbChoose('new')">Create a new folder</button>
+    <button onclick="usbChoose('existing')">Use an existing folder</button>
+    <button class="link" onclick="usbChoose(null)">Cancel</button>
+  </div>
+</div>
+
+<div class="playerbar">
+  <div class="np"><div class="t" id="npTitle">Nothing playing</div><div class="a" id="npArtist"></div></div>
+  <button class="pbbtn" id="pbBtn" onclick="pbToggle()" title="Play / pause">▶</button>
+  <span class="pbtime" id="pbCur">0:00</span>
+  <input type="range" class="pbseek" id="pbSeek" min="0" max="1000" value="0" step="1" oninput="pbSeek(this.value)" title="Seek">
+  <span class="pbtime" id="pbDur">0:00</span>
+  <audio id="player" preload="none"></audio>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let TRACKS=[], FIELDS=[], USBS=[], ACTIVE_USB="";
+let SELECTED=new Set(), RATING_FILTER=0, NOW=null, CAN_UNDO=false, GMENU_OWNER=null;
+let COLS={}; try{COLS=JSON.parse(localStorage.getItem('djlib-cols')||'{}');}catch(e){COLS={};}
+let KEY_MODE=localStorage.getItem('djlib-keymode')||'camelot';
+let SORT={key:'',dir:'asc'}; try{SORT=JSON.parse(localStorage.getItem('djlib-sort')||'{}');SORT.key=SORT.key||'';SORT.dir=SORT.dir||'asc';}catch(e){SORT={key:'',dir:'asc'};}
+let CURRENT_ROWS=[], LAST_IDX=null, PENDING_USB_NAME='', SOURCES=[], CURRENT_SOURCE='', SHOW_HIDDEN=false, SHOW_SELECTED=false, USBSET=new Set(), DRAG_PATHS=[], CRATES=[];
+let CRATE_COLLAPSED=new Set((()=>{try{return JSON.parse(localStorage.getItem('onda-crateco')||'[]');}catch(e){return[];}})());
+const saveTimers={};
+const player=document.getElementById('player');
+
+/* ===== Camelot key mapping ===== */
+const CAMELOT={'G#m':'1A','Abm':'1A','B':'1B','Cb':'1B',
+ 'D#m':'2A','Ebm':'2A','F#':'2B','Gb':'2B','A#m':'3A','Bbm':'3A','Db':'3B','C#':'3B',
+ 'Fm':'4A','Ab':'4B','G#':'4B','Cm':'5A','Eb':'5B','D#':'5B','Gm':'6A','Bb':'6B','A#':'6B',
+ 'Dm':'7A','F':'7B','Am':'8A','C':'8B','Em':'9A','G':'9B','Bm':'10A','D':'10B',
+ 'F#m':'11A','Gbm':'11A','A':'11B','C#m':'12A','Dbm':'12A','E':'12B'};
+const CAMELOT_STD={'1A':'Abm','1B':'B','2A':'Ebm','2B':'Gb','3A':'Bbm','3B':'Db','4A':'Fm','4B':'Ab',
+ '5A':'Cm','5B':'Eb','6A':'Gm','6B':'Bb','7A':'Dm','7B':'F','8A':'Am','8B':'C','9A':'Em','9B':'G',
+ '10A':'Bm','10B':'D','11A':'F#m','11B':'A','12A':'C#m','12B':'E'};
+function keyInfo(raw){
+  if(!raw) return {raw:'',camelot:'',std:'',num:0,color:''};
+  let s=(''+raw).trim();
+  let cm=s.match(/^(\d{1,2})\s*([ABab])$/); let camelot='';
+  if(cm){camelot=cm[1]+cm[2].toUpperCase();}
+  else{let m=s.match(/^([A-Ga-g])([#b♯♭]?)\s*(.*)$/);
+    if(m){let note=m[1].toUpperCase()+(m[2]?m[2].replace('♯','#').replace('♭','b'):'');
+      let rest=(m[3]||'').toLowerCase();
+      let minor=(rest.startsWith('m')&&!rest.startsWith('maj'))||rest.includes('min');
+      camelot=CAMELOT[note+(minor?'m':'')]||'';}}
+  if(!camelot) return {raw:s,camelot:'',std:s,num:0,color:''};
+  let num=parseInt(camelot);
+  return {raw:s,camelot,std:CAMELOT_STD[camelot]||s,num,color:`hsl(${(num-1)*30} 40% 52%)`};
+}
+function keyId(raw){const k=keyInfo(raw);return k.camelot||raw||'';}
+function keyDisplay(raw){const k=keyInfo(raw);if(!k.camelot)return raw||'';return KEY_MODE==='camelot'?k.camelot:k.std;}
+function keyOrder(raw){const k=keyInfo(raw);return k.camelot?(k.num*2+(k.camelot.endsWith('B')?1:0)):999;}
+function keyChipHtml(raw){
+  const k=keyInfo(raw); if(!raw) return '';
+  if(!k.camelot) return `<span class="mono ro">${esc(raw)}</span>`;
+  const c=k.color;
+  return `<span class="keychip" style="background:color-mix(in srgb,${c} 22%,transparent);border:1px solid color-mix(in srgb,${c} 55%,transparent)">${esc(keyDisplay(raw))}</span>`;
+}
+function setKeyModeVal(v){KEY_MODE=v;localStorage.setItem('djlib-keymode',KEY_MODE);buildFilters();render();}
+
+/* theme */
+(function(){document.documentElement.dataset.theme=localStorage.getItem('djlib-theme')||'dark';})();
+function setTheme(name){document.documentElement.dataset.theme=name;localStorage.setItem('djlib-theme',name);
+  syncThemeBtn();const s=document.getElementById('themeSel');if(s)s.value=name;}
+function syncThemeBtn(){document.getElementById('themeBtn').textContent=document.documentElement.dataset.theme==='light'?'☾':'☀';}
+function toggleTheme(){setTheme(document.documentElement.dataset.theme==='light'?'dark':'light');}
+function openSettings(){document.getElementById('themeSel').value=document.documentElement.dataset.theme;
+  document.getElementById('setKeyMode').value=KEY_MODE;document.getElementById('settings').style.display='flex';}
+function closeSettings(){document.getElementById('settings').style.display='none';}
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2400);}
+async function api(p,b){const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});return r.json();}
+function setCanUndo(v){if(v!==undefined){CAN_UNDO=!!v;document.getElementById('undoBtn').disabled=!CAN_UNDO;}}
+
+async function init(){
+  syncThemeBtn();restoreSidebar();
+  const s=await api('/api/state');applyState(s);
+  buildFilters();render();
+  if(!localStorage.getItem('onda-welcomed')) document.getElementById('welcome').style.display='flex';
+}
+function restoreSidebar(){let st={};try{st=JSON.parse(localStorage.getItem('onda-sb')||'{}');}catch(e){}
+  Object.keys(st).forEach(sec=>{if(st[sec]){const el=document.querySelector('.sbsec[data-sec="'+sec+'"]');if(el)el.classList.add('collapsed');}});}
+function toggleSec(sec){const el=document.querySelector('.sbsec[data-sec="'+sec+'"]');if(!el)return;
+  el.classList.toggle('collapsed');let st={};try{st=JSON.parse(localStorage.getItem('onda-sb')||'{}');}catch(e){}
+  st[sec]=el.classList.contains('collapsed');localStorage.setItem('onda-sb',JSON.stringify(st));}
+function welcomeStart(){localStorage.setItem('onda-welcomed','1');document.getElementById('welcome').style.display='none';startTour();}
+function welcomeSkip(){localStorage.setItem('onda-welcomed','1');localStorage.setItem('onda-toured','1');document.getElementById('welcome').style.display='none';}
+function openHelp(){document.getElementById('help').style.display='flex';}
+function closeHelp(){document.getElementById('help').style.display='none';}
+
+/* ---- guided walkthrough (hover tooltips are the native titles) ---- */
+const TOUR=[
+  {sel:'.brand',title:'Welcome to ONDA',text:'A library to tag your music and build genre-sorted USB crates for your sets. Here’s a 60-second tour — you can Skip anytime.'},
+  {sel:'header button.primary',title:'Add Folder',text:'Start here: load a music folder. Your files are only read, never changed.'},
+  {sel:'#srcBox',title:'Folder view',text:'See all your folders together, or one at a time. The ✕ removes a folder from the library (files stay on disk).'},
+  {sel:'#usbBox',title:'USB crates',text:'Make USB crates with ＋ (a new folder or an existing one), pick the active one here, or forget it with ✕.'},
+  {sel:'#settingsBtn',title:'Settings',text:'Themes, key notation (Camelot 8A ↔ standard Am), USB Copy vs Move, and Auto-file by genre all live here.'},
+  {sel:'.sbsec[data-sec="crates"]',title:'Crates (drag & drop)',text:'Make crate folders here, then drag tracks from the list onto a crate — or onto the USB box up top — to copy/move them. Perfect for building a set.'},
+  {sel:'#gcleanBtn',title:'Clean up genres',text:'Messy genre tags? This finds duplicate spellings (JerseyClub = Jersey Club, SPEED GARAGE (ISH) = Speed Garage) and ASKS you before merging. There’s also a Manual Merge to combine any genres you choose into one name. Re-open it whenever you add more music.'},
+  {sel:'#helpBtn',title:'Help anytime',text:'Open this Help for a full button reference and to replay this tour. Tip: hover any button to see what it does.'},
+  {sel:'.toolbar',title:'Tracks & sets',text:'Once a folder is loaded, each track row lets you tag, preview (▶), hide, reveal in Finder, and file to USB. Click column headers to sort. That’s it — enjoy!'},
+];
+let TOUR_I=0, TOUR_EL=null;
+function startTour(){TOUR_I=0;tourStep();}
+function tourStep(){
+  if(TOUR_EL){TOUR_EL.classList.remove('tour-highlight');TOUR_EL=null;}
+  const s=TOUR[TOUR_I]; const el=document.querySelector(s.sel);
+  const tip=document.getElementById('tourTip');
+  document.getElementById('tourTitle').textContent=s.title;
+  document.getElementById('tourText').textContent=s.text;
+  document.getElementById('tourStepN').textContent=(TOUR_I+1)+' / '+TOUR.length;
+  document.getElementById('tourBack').style.visibility=TOUR_I===0?'hidden':'visible';
+  document.getElementById('tourNext').textContent=TOUR_I===TOUR.length-1?'Done':'Next';
+  tip.style.display='block';
+  if(el){el.classList.add('tour-highlight');TOUR_EL=el;
+    const r=el.getBoundingClientRect();
+    let top=r.bottom+10, left=Math.min(Math.max(8,r.left), window.innerWidth-300);
+    if(top+180>window.innerHeight) top=Math.max(8,r.top-190);
+    tip.style.top=top+'px'; tip.style.left=left+'px';
+  } else { tip.style.top='80px'; tip.style.left='50%'; tip.style.transform='translateX(-50%)'; }
+}
+function tourGo(d){TOUR_I+=d; if(TOUR_I>=TOUR.length){endTour();return;} if(TOUR_I<0)TOUR_I=0; tourStep();}
+function endTour(){localStorage.setItem('onda-toured','1');
+  if(TOUR_EL){TOUR_EL.classList.remove('tour-highlight');TOUR_EL=null;}
+  document.getElementById('tourTip').style.display='none';}
+async function setUsbModeVal(m){await api('/api/set_usb_mode',{mode:m});
+  toast(m==='copy'?'USB mode: Copy — your originals stay put':'USB mode: Move — files relocate into the USB');}
+async function reveal(i){await api('/api/reveal',{path:TRACKS[i].path});}
+function toggleShowHidden(){SHOW_HIDDEN=document.getElementById('showHidden').checked;render();}
+function toggleShowSelected(){SHOW_SELECTED=document.getElementById('showSel').checked;render();}
+/* ---- genre cleanup ---- */
+let GPLAN={_all:[]};
+async function openGenreClean(){
+  const r=await api('/api/genre_plan');
+  const all=[...(r.auto||[]).map(g=>({...g,safe:true})),...(r.review||[]).map(g=>({...g,safe:false}))];
+  GPLAN={_all:all};
+  const body=document.getElementById('gcBody');
+  if(!all.length){body.innerHTML='<p class="muted" style="padding:10px 4px">No duplicate genres found 🎉</p>';}
+  else body.innerHTML=all.map((g,i)=>{
+    const members=g.members.map(m=>`${esc(m.genre)} (${m.count})`).join(',  ');
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--line)">
+      <label class="chk"><input type="checkbox" class="gcChk" data-i="${i}" ${g.safe?'checked':''}> <b>${g.safe?'Merge':'Review'}</b> — ${esc(members)}</label>
+      <div style="margin-top:4px;display:flex;align-items:center;gap:6px">→ <input class="gcTo" data-i="${i}" value="${esc(g.to)}" style="flex:1"></div></div>`;
+  }).join('');
+  // manual section: every current genre as a checkbox
+  const genres=uniq(TRACKS.map(t=>t.genre));
+  document.getElementById('gcManualTo').value='';
+  document.getElementById('gcManual').innerHTML=genres.length?genres.map(g=>
+    `<label class="chk"><input type="checkbox" class="gcMan" value="${escAttr(g)}"> ${esc(g)}</label>`).join('')
+    :'<span class="muted">No genres yet.</span>';
+  document.getElementById('genreClean').style.display='flex';
+}
+function closeGenreClean(){document.getElementById('genreClean').style.display='none';}
+async function applyGenreClean(){
+  const all=GPLAN._all||[], merges=[];
+  document.querySelectorAll('.gcChk').forEach(chk=>{
+    if(chk.checked){const i=+chk.dataset.i;const to=document.querySelector('.gcTo[data-i="'+i+'"]').value.trim();
+      if(to)merges.push({members:all[i].members.map(m=>m.genre),to});}
+  });
+  // manual merge
+  const manTo=document.getElementById('gcManualTo').value.trim();
+  const manChecked=[...document.querySelectorAll('.gcMan:checked')].map(e=>e.value);
+  if(manTo && manChecked.length>=1) merges.push({members:manChecked,to:manTo});
+  else if(manChecked.length && !manTo){toast('Type a name for the genres you checked');return;}
+  if(!merges.length){toast('Nothing selected to merge');return;}
+  const refile=document.getElementById('gcRefile').checked;
+  const r=await api('/api/genre_apply',{merges,refile});
+  if(r.error){toast(r.error);return;}
+  closeGenreClean();applyState(r);buildFilters();render();toast(`Merged ${r.merged||0} track(s)`);
+}
+function hideTrack(i){TRACKS[i].hidden=true;doSave(TRACKS[i]);render();toast('Hidden — turn on “Show hidden” to bring it back');}
+function unhideTrack(i){TRACKS[i].hidden=false;doSave(TRACKS[i]);render();toast('Unhidden');}
+function applyState(s){
+  if(s.fields)FIELDS=s.fields; if(s.tracks)TRACKS=s.tracks;
+  if(s.usbs)USBS=s.usbs; if(s.active_usb!==undefined)ACTIVE_USB=s.active_usb;
+  if(s.sources)SOURCES=s.sources;
+  if(s.crates)CRATES=s.crates;
+  if(CURRENT_SOURCE && !SOURCES.includes(CURRENT_SOURCE)) CURRENT_SOURCE='';
+  renderCrates();
+  if(s.auto_file!==undefined)document.getElementById('setAutoFile').checked=s.auto_file;
+  if(s.usb_mode)document.getElementById('setUsbMode').value=s.usb_mode;
+  document.getElementById('setKeyMode').value=KEY_MODE;
+  setCanUndo(s.can_undo);renderUsbBar();renderSrcBar();
+  document.getElementById('rescanBtn').disabled=SOURCES.length===0;
+}
+function renderSrcBar(){
+  const sel=document.getElementById('srcSel');
+  const base=p=>p.replace(/\/+$/,'').split('/').pop()||p;
+  sel.innerHTML=`<option value="">All folders${SOURCES.length?` (${SOURCES.length})`:''}</option>`+
+    SOURCES.map(p=>`<option value="${esc(p)}" ${p===CURRENT_SOURCE?'selected':''} title="${esc(p)}">${esc(base(p))}</option>`).join('');
+}
+function setSource(){CURRENT_SOURCE=document.getElementById('srcSel').value;SELECTED.clear();LAST_IDX=null;render();}
+async function removeSource(){
+  if(!CURRENT_SOURCE){toast('Pick a specific folder first (not “All”)');return;}
+  const nm=CURRENT_SOURCE.split('/').pop();
+  if(!confirm('Remove folder "'+nm+'" from the library?\n(The files stay on your disk — they just leave this app.)'))return;
+  const r=await api('/api/remove_source',{folder:CURRENT_SOURCE});
+  if(r.error){toast(r.error);return;}
+  CURRENT_SOURCE='';applyState(r);buildFilters();render();toast('Removed folder: '+nm);
+}
+async function setAutoFileVal(on){await api('/api/set_auto_file',{on});
+  toast(on?'Auto-file ON — a genre move happens instantly':'Auto-file OFF — use Send → USB');}
+async function undo(){if(!CAN_UNDO)return;const r=await api('/api/undo');
+  if(r.error){toast(r.error);return;}applyState(r);SELECTED.clear();buildFilters();render();toast('Undone: '+(r.undone||'last action'));}
+
+/* USB */
+function renderUsbBar(){const sel=document.getElementById('usbSel');
+  sel.innerHTML='<option value="">(none)</option>'+USBS.map(u=>`<option value="${u.id}" ${u.id===ACTIVE_USB?'selected':''}>${esc(u.name)}</option>`).join('');}
+function newUsb(){
+  const name=prompt('Name this USB (e.g. Festival USB, Wedding Gigs):'); if(!name)return;
+  PENDING_USB_NAME=name.trim();
+  document.getElementById('usbModalName').textContent='“'+PENDING_USB_NAME+'”';
+  document.getElementById('usbModal').style.display='flex';
+}
+async function usbChoose(kind){
+  document.getElementById('usbModal').style.display='none';
+  if(!kind) return;
+  toast('Pick a folder in the dialog (it may open behind this window)…');
+  const r=await api('/api/add_usb',{name:PENDING_USB_NAME, use_existing: kind==='existing'});
+  if(r.cancelled){toast('No folder chosen — USB not created');return;}
+  if(r.error){toast(r.error);return;}
+  USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);renderUsbBar();
+  toast('USB ready: '+PENDING_USB_NAME);
+}
+async function setActiveUsb(){const id=document.getElementById('usbSel').value;
+  const r=await api('/api/set_active_usb',{id});USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);renderUsbBar();buildFilters();render();toast(id?'Active USB set':'No active USB');}
+async function removeUsb(){if(!ACTIVE_USB){toast('No USB selected');return;}
+  const u=USBS.find(x=>x.id===ACTIVE_USB);
+  if(!confirm('Forget USB "'+(u?u.name:'')+'"?\n(The folder and its files stay on disk.)'))return;
+  const r=await api('/api/remove_usb',{id:ACTIVE_USB});USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);renderUsbBar();toast('USB forgotten');}
+
+/* crates + drag-and-drop */
+function saveCrateCollapsed(){localStorage.setItem('onda-crateco',JSON.stringify([...CRATE_COLLAPSED]));}
+function toggleCrate(path){CRATE_COLLAPSED.has(path)?CRATE_COLLAPSED.delete(path):CRATE_COLLAPSED.add(path);saveCrateCollapsed();renderCrates();}
+function viewCrate(path){scan(path);}   /* click a crate -> show what's inside (like Serato) */
+function renderCrates(){
+  const el=document.getElementById('crateTree'); if(!el)return;
+  if(!CRATES.length){el.innerHTML='<span class="muted" style="font-size:11px">No crates yet. Click ＋ New crate, then drag tracks onto it.</span>';return;}
+  let html='';
+  function walk(node,depth,topId){
+    const has=node.subs&&node.subs.length, collapsed=CRATE_COLLAPSED.has(node.path), pad=4+depth*12;
+    const active=(CURRENT_SOURCE===node.path)?' style="color:var(--accent)"':'';
+    html+=`<div class="crate" data-path="${escAttr(node.path)}" ondragover="crateOver(event,this)" ondragleave="this.classList.remove('dragover')" ondrop="crateDropEv(event,this)" style="padding-left:${pad}px">`+
+      `<span class="ctw" onclick="toggleCrate('${escAttr(node.path)}')">${has?(collapsed?'▸':'▾'):''}</span>`+
+      `<span class="cfolder"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg></span>`+
+      `<span class="cname"${active} title="Show what's in this crate" onclick="viewCrate('${escAttr(node.path)}')">${esc(node.name)}</span>`+
+      `<span class="cact" title="New sub-folder" onclick="addSub('${escAttr(node.path)}')">＋</span>`+
+      (depth===0?`<span class="cact" title="Remove crate (folder stays on disk)" onclick="removeCrate('${escAttr(topId)}')">✕</span>`:'')+
+    `</div>`;
+    if(has&&!collapsed)node.subs.forEach(s=>walk(s,depth+1,topId));
+  }
+  CRATES.forEach(c=>walk(c,0,c.id));
+  el.innerHTML=html;
+}
+async function newCrate(){
+  const name=prompt('Name this crate (leave blank to add an existing folder):');
+  if(name===null)return;
+  const useExisting=!name.trim();
+  toast('Pick a folder in the dialog (it may open behind this window)…');
+  const r=await api('/api/add_crate',{name:name.trim(),use_existing:useExisting});
+  if(r.cancelled){toast('No folder chosen');return;}
+  if(r.error){toast(r.error);return;}
+  CRATES=r.crates||CRATES;renderCrates();toast('Crate ready');
+}
+async function addSub(parent){
+  const name=prompt('Name the sub-folder:'); if(!name)return;
+  const r=await api('/api/add_subcrate',{parent,name:name.trim()});
+  if(r.error){toast(r.error);return;}
+  CRATES=r.crates||CRATES;renderCrates();
+}
+async function removeCrate(id){
+  if(!confirm('Remove this crate from the sidebar?\n(The folder and its files stay on disk.)'))return;
+  const r=await api('/api/remove_crate',{id});CRATES=r.crates||CRATES;renderCrates();toast('Crate removed');
+}
+function rowDrag(e,path){
+  DRAG_PATHS=(SELECTED.has(path)&&SELECTED.size>1)?[...SELECTED]:[path];
+  e.dataTransfer.effectAllowed='copyMove';
+  try{e.dataTransfer.setData('text/plain',DRAG_PATHS.join('\n'));}catch(_){}
+}
+/* only crates and the USB box accept drops — block everything else (BPM/energy ranges, search, cells) */
+function _isDropTarget(t){return t&&t.closest&&(t.closest('.crate')||t.closest('#usbBox'));}
+document.addEventListener('dragover',e=>{if(DRAG_PATHS.length&&!_isDropTarget(e.target)){e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='none';}});
+document.addEventListener('drop',e=>{if(DRAG_PATHS.length&&!_isDropTarget(e.target))e.preventDefault();});
+document.addEventListener('dragend',()=>{DRAG_PATHS=[];});
+function crateOver(e,el){e.preventDefault();el.classList.add('dragover');e.dataTransfer.dropEffect='copy';}
+async function crateDropEv(e,el){e.preventDefault();el.classList.remove('dragover');
+  const dest=el.getAttribute('data-path'); if(!DRAG_PATHS.length)return;
+  const r=await api('/api/crate_drop',{paths:DRAG_PATHS,dest});
+  if(r.error){toast(r.error);return;}
+  applyState(r);buildFilters();render();
+  toast(`${r.mode==='move'?'Moved':'Copied'} ${r.dropped||0} into ${dest.split('/').pop()}`);
+}
+function usbOver(e){if(!DRAG_PATHS.length)return;e.preventDefault();document.getElementById('usbBox').classList.add('dragover');e.dataTransfer.dropEffect='copy';}
+function usbDrop(e){e.preventDefault();document.getElementById('usbBox').classList.remove('dragover');
+  if(!DRAG_PATHS.length)return; if(!ACTIVE_USB){toast('Pick an Active USB first');return;} sendToUsb(DRAG_PATHS);}
+
+/* load */
+async function pickFolder(){toast('Opening folder picker…');const r=await api('/api/pick_folder');if(!r.folder){toast('Cancelled');return;}await scan(r.folder);}
+async function rescan(){toast('Rescanning…');const r=await api('/api/rescan_all');if(r.error){toast(r.error);return;}
+  applyState(r);buildFilters();render();toast('Rescanned');}
+async function scan(folder){toast('Scanning…');const r=await api('/api/scan',{folder});if(r.error){toast(r.error);return;}
+  if(r.added)CURRENT_SOURCE=r.added;        // jump to the folder you just added
+  applyState(r);SELECTED.clear();LAST_IDX=null;buildFilters();render();
+  toast(`Loaded ${TRACKS.length} tracks · viewing this folder`);}
+
+/* filters */
+function uniq(a){return [...new Set(a.filter(x=>x!==''&&x!=null))].sort();}
+function genreList(){return uniq(TRACKS.map(t=>t.genre));}
+function safeName(s){return String(s||'').replace(/[<>:"/\\|?*]/g,'_').trim();}
+function refreshUsbSet(){USBSET=new Set();if(ACTIVE_USB)TRACKS.forEach(t=>{if(t.usb===ACTIVE_USB&&t.usb_genre)USBSET.add(t.usb_genre);});}
+function genreOnUsb(g){if(!g||!ACTIVE_USB)return false;return USBSET.has(g)||USBSET.has(safeName(g));}
+function usbDot(g){return genreOnUsb(g)?'<span class="usbdot" title="On the active USB"></span>':'';}
+function buildFilters(){
+  refreshUsbSet();
+  const keepG=new Set(checkedVals('fg')), keepK=new Set(checkedVals('fk')), keepT=new Set(checkedVals('ft'));
+  const gen=genreList();
+  document.getElementById('fGenre').innerHTML=gen.length?gen.map(g=>
+    `<div class="frow"><label class="chk"><input type="checkbox" class="fg" value="${esc(g)}" onchange="render()"> ${esc(g)} ${usbDot(g)}</label>`+
+    `<span class="xdel" title="Delete this genre everywhere" onclick="deleteGenre(event,'${escAttr(g)}')">✕</span></div>`).join(''):'<span class="muted">—</span>';
+  const kids=uniq(TRACKS.map(t=>keyId(t.key)));
+  document.getElementById('fKey').innerHTML=kids.length?kids.map(kid=>
+    `<label class="chk"><input type="checkbox" class="fk" value="${esc(kid)}" onchange="render()"> ${keyChipHtml(kid)}</label>`).join(''):'<span class="muted">—</span>';
+  const tags=uniq([].concat(...TRACKS.map(t=>t.tags||[])));
+  document.getElementById('fTags').innerHTML=tags.length?tags.map(tg=>
+    `<label class="chk"><input type="checkbox" class="ft" value="${esc(tg)}" onchange="render()"> ${esc(tg)}</label>`).join(''):'<span class="muted">—</span>';
+  document.querySelectorAll('.fg').forEach(c=>{if(keepG.has(c.value))c.checked=true;});
+  document.querySelectorAll('.fk').forEach(c=>{if(keepK.has(c.value))c.checked=true;});
+  document.querySelectorAll('.ft').forEach(c=>{if(keepT.has(c.value))c.checked=true;});
+  renderRatingFilter();
+}
+function renderRatingFilter(){let h='';for(let i=1;i<=5;i++)h+=`<span onclick="setRatingFilter(${i})" class="${i<=RATING_FILTER?'on':''}">★</span>`;
+  h+=` <span class="muted" style="font-size:10px;cursor:pointer" onclick="setRatingFilter(0)">clear</span>`;
+  document.getElementById('fRating').innerHTML=h;}
+function setRatingFilter(n){RATING_FILTER=(n===RATING_FILTER)?0:n;renderRatingFilter();render();}
+function checkedVals(c){return [...document.querySelectorAll('.'+c+':checked')].map(e=>e.value);}
+function clearFilters(){document.querySelectorAll('aside input[type=checkbox]').forEach(c=>c.checked=false);
+  ['eMin','eMax','bMin','bMax'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('search').value='';RATING_FILTER=0;renderRatingFilter();render();}
+function num(id){const v=document.getElementById(id).value;return v===''?null:parseFloat(v);}
+function passes(t){
+  if(t.hidden && !SHOW_HIDDEN) return false;
+  if(SHOW_SELECTED && !SELECTED.has(t.path)) return false;
+  if(CURRENT_SOURCE && t.source!==CURRENT_SOURCE) return false;
+  const q=document.getElementById('search').value.trim().toLowerCase();
+  if(q){const hay=`${t.title} ${t.artist} ${t.filename} ${t.notes} ${(t.tags||[]).join(' ')}`.toLowerCase();if(!hay.includes(q))return false;}
+  const gs=checkedVals('fg');if(gs.length&&!gs.includes(t.genre))return false;
+  const ks=checkedVals('fk');if(ks.length&&!ks.includes(keyId(t.key)))return false;
+  const ts=checkedVals('ft');if(ts.length&&!ts.some(x=>(t.tags||[]).includes(x)))return false;
+  const eMin=num('eMin'),eMax=num('eMax');
+  if(eMin!==null&&(t.energy||0)<eMin)return false; if(eMax!==null&&(t.energy||0)>eMax)return false;
+  if(RATING_FILTER&&(t.rating||0)<RATING_FILTER)return false;
+  const bMin=num('bMin'),bMax=num('bMax'),bpm=parseFloat(t.bpm);
+  if(bMin!==null&&(!bpm||bpm<bMin))return false; if(bMax!==null&&(!bpm||bpm>bMax))return false;
+  return true;
+}
+
+/* sorting */
+function setSort(key){
+  if(SORT.key!==key){SORT.key=key;SORT.dir='asc';}        // 1st click: ascending
+  else if(SORT.dir==='asc'){SORT.dir='desc';}             // 2nd click: descending
+  else {SORT.key='';SORT.dir='asc';}                      // 3rd click: original (load) order
+  localStorage.setItem('djlib-sort',JSON.stringify(SORT));render();}
+function sortRows(rows){
+  const k=SORT.key;
+  if(!k) return rows;   // no active sort -> keep current order (renaming won't move rows)
+  const v=(t)=>{
+    if(k==='genre')return (t.genre||'').toLowerCase();
+    if(k==='energy')return t.energy||0;
+    if(k==='rating')return t.rating||0;
+    if(k==='bpm')return parseFloat(t.bpm)||0;
+    if(k==='key')return keyOrder(t.key);
+    return (t.title||t.filename||'').toLowerCase(); // 'title' or default
+  };
+  rows.sort((a,b)=>{const x=v(a),y=v(b);let c=x<y?-1:x>y?1:0;return SORT.dir==='desc'?-c:c;});
+  return rows;
+}
+
+/* columns */
+function colDefs(){
+  const defs=[
+    {key:'play',always:1,th:'',cell:(t,i)=>{const playing=NOW===t.path&&!player.paused;
+      return `<td><button class="play${playing?' on':''}" onclick="playTrack(${i})">${playing?'❚❚':'▶'}</button></td>`;}},
+    {key:'sel',always:1,th:'',cell:(t,i,di)=>`<td><input type="checkbox" ${SELECTED.has(t.path)?'checked':''} onclick="rowCheck(event,${di},'${escAttr(t.path)}')"></td>`},
+    {key:'cover',th:'Art',cell:(t)=>`<td><div class="coverbox"><span class="ph">♪</span><img class="cover" src="/cover?path=${encodeURIComponent(t.path)}" loading="lazy" onerror="this.classList.add('nope')"></div></td>`},
+    {key:'track',always:1,th:'Track',sortKey:'title',cell:trackCell},
+    {key:'genre',th:'Genre',sortKey:'genre',cell:(t,i)=>`<td><div class="genrewrap">
+        ${genreOnUsb(t.genre)?'<span class="usbdot" title="This genre is on the active USB"></span>':''}
+        <input class="cell" value="${esc(t.genre||'')}" onchange="setGenre(${i},this.value)" placeholder="genre">
+        <button class="gbtn" onclick="openGenreMenu(event,${i})" title="Pick / delete existing genres">▾</button></div></td>`},
+    {key:'energy',th:'En',sortKey:'energy',cell:(t,i)=>{let eo='<option value="0"></option>';for(let e=1;e<=10;e++)eo+=`<option value="${e}" ${t.energy==e?'selected':''}>${e}</option>`;
+        return `<td><select class="cell" onchange="setField(${i},'energy',parseInt(this.value))">${eo}</select></td>`;}},
+    {key:'rating',th:'Rating',sortKey:'rating',cell:(t,i)=>{let st='';for(let s=1;s<=5;s++)st+=`<span class="${s<=(t.rating||0)?'on':''}" onclick="setRating(${i},${s})">★</span>`;
+        return `<td><span class="stars">${st}</span></td>`;}},
+    {key:'bpm',th:'BPM',sortKey:'bpm',cell:(t)=>`<td class="ro mono">${esc(t.bpm||'')}</td>`},
+    {key:'key',th:'Key',sortKey:'key',cell:(t)=>`<td>${keyChipHtml(t.key)}</td>`},
+    {key:'tags',th:'Tags',cell:(t,i)=>{const tagsHtml=(t.tags||[]).map(x=>`<span class="pill">${esc(x)}</span>`).join('');
+        return `<td class="tagcell"><div>${tagsHtml}</div><input class="cell" placeholder="comma,separated" value="${esc((t.tags||[]).join(', '))}" onchange="setTags(${i},this.value)"></td>`;}},
+    {key:'notes',th:'Notes',cell:(t,i)=>`<td><input class="cell" value="${esc(t.notes||'')}" onchange="setField(${i},'notes',this.value)"></td>`},
+  ];
+  FIELDS.forEach(f=>defs.push({key:'cf:'+f.name,th:esc(f.name),cell:(t,i)=>{const v=(t.custom||{})[f.name]||'';
+    return `<td><input class="cell" value="${esc(v)}" onchange="setCustom(${i},'${escAttr(f.name)}',this.value)"></td>`;}}));
+  return defs;
+}
+function visibleCols(){return colDefs().filter(c=>c.always||COLS[c.key]!==false);}
+function trackCell(t,i){
+  const usbName=t.usb?(USBS.find(u=>u.id===t.usb)||{}).name:'';
+  const usbTag=usbName?`<div class="usbtag">▸ ${esc(usbName)} / ${esc(t.usb_genre||t.genre)}</div>`:'';
+  let br='';
+  if(t.lossless) br=`<span class="hibr">LOSSLESS</span>`;
+  else if(t.bitrate>0) br=(t.bitrate>=320)?`<span class="hibr">${t.bitrate}kbps</span>`:`<span class="lowbr" title="Below 320 kbps">${t.bitrate}kbps</span>`;
+  else br=`<span class="br0" title="Bitrate unknown">—kbps</span>`;
+  return `<td>
+    <input class="cell tin" value="${esc(t.title||'')}" placeholder="title" onchange="setTitle(${i},this.value)" title="Editing the title renames the file">
+    <input class="cell ain" value="${esc(t.artist||'')}" placeholder="artist" onchange="setField(${i},'artist',this.value)">
+    <div class="fname"><span class="mono">${esc(t.filename)}</span>${br}<button class="mini" onclick="sendOne(${i})" title="File this track into the active USB by its genre">▸ USB</button><button class="mini" onclick="reveal(${i})" title="Show this file in Finder">⊙ Finder</button><button class="mini2" onclick="${t.hidden?`unhideTrack(${i})`:`hideTrack(${i})`}" title="${t.hidden?'Unhide this track':'Hide this track from the list'}">${t.hidden?'unhide':'hide'}</button></div>${usbTag}</td>`;
+}
+
+/* render */
+function render(){
+  let rows=TRACKS.filter(passes);
+  refreshUsbSet();
+  rows=sortRows(rows);
+  if(SHOW_HIDDEN) rows=rows.filter(t=>t.hidden).concat(rows.filter(t=>!t.hidden));  // hidden jump to top
+  CURRENT_ROWS=rows.map(t=>t.path);
+  document.getElementById('count').textContent=`${rows.length} / ${TRACKS.length} tracks · ${SELECTED.size} sel`;
+  if(TRACKS.length===0){document.getElementById('tableWrap').innerHTML='<div class="empty"><div style="font-size:15px;color:var(--text);margin-bottom:6px">No music loaded yet</div>Click <b>Add Folder…</b> at the top-left to pick a music folder.<br>Your files aren’t changed — ONDA just reads them so you can tag, preview, and sort.</div>';return;}
+  const cols=visibleCols();
+  const head=cols.map(c=>{
+    if(c.sortKey){const act=SORT.key===c.sortKey;const ar=act?(SORT.dir==='asc'?' ▲':' ▼'):'';
+      return `<th class="sortable${act?' sorted':''}" onclick="setSort('${c.sortKey}')">${c.th}${ar}</th>`;}
+    return `<th>${c.th||''}</th>`;}).join('');
+  const body=rows.map((t,di)=>{const i=TRACKS.indexOf(t);
+    return `<tr data-path="${esc(t.path)}" draggable="true" ondragstart="rowDrag(event,'${escAttr(t.path)}')" class="${NOW===t.path?'playing':''}${t.hidden?' hiddenrow':''}">${cols.map(c=>c.cell(t,i,di)).join('')}</tr>`;}).join('');
+  document.getElementById('tableWrap').innerHTML=`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  document.getElementById('selAll').checked=rows.length>0&&rows.every(t=>SELECTED.has(t.path));
+}
+/* lightweight updates that DON'T rebuild the table (avoids cover re-load flicker) */
+function updatePlayingUI(){
+  document.querySelectorAll('#tableWrap tbody tr').forEach(tr=>{
+    const p=tr.getAttribute('data-path'); const isNow=p===NOW, playing=isNow&&!player.paused;
+    tr.classList.toggle('playing',isNow);
+    const btn=tr.querySelector('.play'); if(btn){btn.classList.toggle('on',playing);btn.textContent=playing?'❚❚':'▶';}
+  });
+}
+function refreshChecks(){
+  document.querySelectorAll('#tableWrap tbody tr').forEach(tr=>{
+    const p=tr.getAttribute('data-path'); const cb=tr.querySelector('input[type=checkbox]'); if(cb)cb.checked=SELECTED.has(p);
+  });
+  document.getElementById('selAll').checked=CURRENT_ROWS.length>0&&CURRENT_ROWS.every(p=>SELECTED.has(p));
+  updateCount();
+}
+function updateCount(){const shown=TRACKS.filter(passes).length;
+  document.getElementById('count').textContent=`${shown} / ${TRACKS.length} tracks · ${SELECTED.size} sel`;}
+
+/* columns menu */
+function openColMenu(ev){ev.stopPropagation();const m=document.getElementById('colMenu');
+  if(m.style.display==='block'){m.style.display='none';return;}
+  const items=colDefs().filter(c=>!c.always);
+  m.innerHTML=items.map(c=>`<label class="ci"><input type="checkbox" ${COLS[c.key]!==false?'checked':''} onchange="toggleCol('${escAttr(c.key)}',this.checked)"> ${c.th||c.key}</label>`).join('');
+  const r=ev.target.getBoundingClientRect();m.style.left=Math.max(8,r.right-190)+'px';m.style.top=(r.bottom+4)+'px';m.style.display='block';}
+function toggleCol(k,on){COLS[k]=on;localStorage.setItem('djlib-cols',JSON.stringify(COLS));render();}
+
+/* genre menu */
+function openGenreMenu(ev,i){ev.stopPropagation();const menu=document.getElementById('genreMenu');
+  if(menu.style.display==='block'&&GMENU_OWNER===i){menu.style.display='none';GMENU_OWNER=null;return;}
+  GMENU_OWNER=i;refreshUsbSet();const gl=genreList();
+  menu.innerHTML=gl.length?gl.map(g=>`<div class="gi"><span class="gname" onclick="pickGenre(${i},'${escAttr(g)}')">${esc(g)} ${usbDot(g)}</span>`+
+    `<span class="gdel" title="Delete this genre everywhere" onclick="deleteGenre(event,'${escAttr(g)}')">✕</span></div>`).join('')
+    :'<div class="none">No genres yet — type one in.</div>';
+  const r=ev.target.getBoundingClientRect();menu.style.left=Math.max(8,r.left-150)+'px';menu.style.top=(r.bottom+4)+'px';menu.style.display='block';}
+function pickGenre(i,g){document.getElementById('genreMenu').style.display='none';GMENU_OWNER=null;setGenre(i,g);}
+async function deleteGenre(ev,g){ev.stopPropagation();document.getElementById('genreMenu').style.display='none';GMENU_OWNER=null;
+  if(!confirm('Delete genre "'+g+'" from ALL tracks?\nTheir genre will be cleared (files already in a USB stay where they are).'))return;
+  const r=await api('/api/delete_genre',{genre:g});if(r.error){toast(r.error);return;}
+  applyState(r);buildFilters();render();toast(`Cleared genre "${g}" from ${r.cleared||0} track(s)`);}
+document.addEventListener('click',e=>{['genreMenu','colMenu'].forEach(id=>{const m=document.getElementById(id);
+  if(m.style.display==='block'&&!m.contains(e.target)){m.style.display='none';if(id==='genreMenu')GMENU_OWNER=null;}});});
+
+/* edits */
+function setField(i,k,v){TRACKS[i][k]=v;queueSave(TRACKS[i]);}
+function setTitle(i,v){TRACKS[i].title=v;doSave(TRACKS[i], v.trim()?v.trim():null);}
+function setGenre(i,v){TRACKS[i].genre=v;buildFilters();doSave(TRACKS[i]);}
+function setRating(i,s){TRACKS[i].rating=(TRACKS[i].rating===s)?0:s;queueSave(TRACKS[i]);render();}
+function setTags(i,v){TRACKS[i].tags=v.split(',').map(x=>x.trim()).filter(Boolean);queueSave(TRACKS[i]);buildFilters();render();}
+function setCustom(i,name,v){TRACKS[i].custom=TRACKS[i].custom||{};TRACKS[i].custom[name]=v;queueSave(TRACKS[i]);}
+function queueSave(t){clearTimeout(saveTimers[t.path]);saveTimers[t.path]=setTimeout(()=>doSave(t),500);}
+async function doSave(t,renameTo){
+  const oldPath=t.path;const payload=Object.assign({},t);if(renameTo)payload.rename_to=renameTo;
+  const r=await api('/api/save_track',payload);if(r.error){toast(r.error);return;}
+  if(r.track){Object.assign(t,r.track);
+    if(SELECTED.has(oldPath)){SELECTED.delete(oldPath);SELECTED.add(t.path);}
+    if(NOW===oldPath)NOW=t.path;
+    if(t.path!==oldPath){render(); if(renameTo)toast('Renamed file → '+t.filename);}
+    if(r.moved){toast(`Moved → ${r.moved.usb} / ${r.moved.genre}`);buildFilters();render();}}
+  setCanUndo(r.can_undo);
+  if(r.no_usb)toast('Tagged. Pick an Active USB to auto-file by genre.');
+  if(r.ok===false)toast('Saved to library (couldn’t embed: '+r.embed+')');
+}
+
+/* send to USB */
+async function sendToUsb(paths){
+  if(!paths.length){toast('Nothing to send');return;}
+  if(!ACTIVE_USB){toast('Pick or create an Active USB first');return;}
+  const r=await api('/api/send_to_usb',{paths});if(r.error){toast(r.error);return;}
+  (r.results||[]).forEach(res=>{const t=TRACKS.find(x=>x.path===res.old);
+    if(t){const old=res.old;Object.assign(t,res.track);if(SELECTED.has(old)){SELECTED.delete(old);SELECTED.add(t.path);}if(NOW===old)NOW=t.path;}});
+  setCanUndo(r.can_undo);buildFilters();render();
+  const moved=(r.results||[]).filter(x=>x.moved).length, skip=(r.skipped||[]).length;
+  toast(`Sent ${moved} to ${r.usb}`+(skip?` · ${skip} skipped (set a genre first)`:''));}
+function sendOne(i){sendToUsb([TRACKS[i].path]);}
+function sendSelected(){if(SELECTED.size===0){toast('Select some tracks first');return;}sendToUsb([...SELECTED]);}
+
+/* selection (shift-range supported), no full re-render so cover art doesn't flicker */
+function rowCheck(e,di,path){
+  if(e.shiftKey && LAST_IDX!==null && CURRENT_ROWS.length){
+    const a=Math.min(LAST_IDX,di), b=Math.max(LAST_IDX,di);
+    for(let k=a;k<=b;k++) SELECTED.add(CURRENT_ROWS[k]);
+  } else {
+    if(SELECTED.has(path)) SELECTED.delete(path); else SELECTED.add(path);
+  }
+  LAST_IDX=di; refreshChecks();
+}
+function toggleSelectAll(){const on=document.getElementById('selAll').checked;
+  CURRENT_ROWS.forEach(p=>on?SELECTED.add(p):SELECTED.delete(p));refreshChecks();}
+async function exportSelected(){if(SELECTED.size===0){toast('Select some tracks first');return;}
+  toast('Choose a destination in the dialog…');
+  const r=await api('/api/export',{paths:[...SELECTED]});
+  if(r.cancelled){toast('Cancelled');return;}if(r.error){toast(r.error);return;}
+  toast(`Copied ${r.copied} tracks → ${r.target}`);
+  if(r.errors&&r.errors.length)alert('Some files had issues:\n'+r.errors.join('\n'));}
+
+/* custom fields */
+async function addField(){const name=prompt('New field name (e.g. Mood, Vibe, Set position):');if(!name)return;
+  const r=await api('/api/add_field',{name:name.trim(),type:'text'});FIELDS=r.fields||FIELDS;setCanUndo(r.can_undo);render();toast('Field added: '+name);}
+async function manageFields(){if(FIELDS.length===0){toast('No custom fields yet');return;}
+  const name=prompt('Type a field name to REMOVE:\n'+FIELDS.map(f=>'• '+f.name).join('\n'));if(!name)return;
+  const r=await api('/api/remove_field',{name:name.trim()});FIELDS=r.fields||FIELDS;setCanUndo(r.can_undo);render();toast('Removed: '+name);}
+
+/* player — uses updatePlayingUI (not render) so covers don't reload */
+function playTrack(i){
+  const t=TRACKS[i];
+  if(NOW===t.path && !player.paused){player.pause();updatePlayingUI();return;}
+  if(NOW===t.path && player.paused){player.play();updatePlayingUI();return;}
+  NOW=t.path;
+  player.src='/audio?path='+encodeURIComponent(t.path);
+  player.play().catch(()=>toast('Could not play this file'));
+  document.getElementById('npTitle').textContent=t.title||t.filename;
+  document.getElementById('npArtist').textContent=t.artist||'';
+  updatePlayingUI();
+}
+function pbFmt(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function pbToggle(){if(!player.src)return;player.paused?player.play():player.pause();}
+function pbSeek(v){if(player.duration)player.currentTime=(v/1000)*player.duration;}
+function pbUpdate(){const d=player.duration||0,c=player.currentTime||0,p=d?c/d*100:0;
+  document.getElementById('pbCur').textContent=pbFmt(c);
+  document.getElementById('pbDur').textContent=pbFmt(d);
+  const s=document.getElementById('pbSeek');s.value=d?Math.round(c/d*1000):0;
+  s.style.background=`linear-gradient(to right,var(--accent) ${p}%,var(--line2) ${p}%)`;
+  document.getElementById('pbBtn').textContent=(player.src&&!player.paused)?'❚❚':'▶';}
+player.addEventListener('timeupdate',pbUpdate);
+player.addEventListener('loadedmetadata',pbUpdate);
+player.addEventListener('play',()=>{pbUpdate();updatePlayingUI();});
+player.addEventListener('pause',()=>{pbUpdate();updatePlayingUI();});
+player.addEventListener('ended',()=>{NOW=null;pbUpdate();updatePlayingUI();});
+
+/* utils */
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function escAttr(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+
+init();
+</script>
+</body>
+</html>

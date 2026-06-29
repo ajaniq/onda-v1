@@ -1,0 +1,19 @@
+# ---- user data (never commit someone's library) ----
+music_library.json
+
+# ---- build artifacts ----
+*.zip
+*.app/
+build/
+dist/
+.ondabuild/
+*.spec
+
+# ---- python ----
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- macOS / misc ----
+.DS_Store
+_iconpreview.png
