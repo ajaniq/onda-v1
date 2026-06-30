@@ -64,4 +64,4 @@ updates never lose your library. (Git-ignored; never committed.)
 
 ## License
 
-MIT (or your choice).
+MIT 
