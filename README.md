@@ -1,3 +1,4 @@
+<img width="1024" height="1024" alt="ONDA_LOGOv2" src="https://github.com/user-attachments/assets/7cdebff5-7973-472d-8e86-f143171526b3" />
 # ONDA
 
 A local macOS app for DJs to tag, preview, and organize a music library, then
