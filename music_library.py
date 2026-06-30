@@ -505,6 +505,39 @@ def scan_folder(folder, lib, source=None):
             del lib["tracks"][path]
     return all_tracks(lib)
 
+def reconcile_usb(lib):
+    """Recheck every USB folder on disk and mark/unmark library tracks accordingly.
+    A track is considered 'on a USB' if a file with the same name exists somewhere
+    under that USB's folder; its usb_genre becomes the sub-folder it sits in.
+    Markers are only cleared for USBs that are currently mounted (so unplugging a
+    drive doesn't wipe membership)."""
+    usbs = lib.get("usbs", [])
+    available = set()
+    on_disk = {}   # basename -> (usb_id, genre)
+    for usb in usbs:
+        base = usb.get("path", "")
+        if not base or not os.path.isdir(base):
+            continue
+        available.add(usb["id"])
+        for root, _d, files in os.walk(base):
+            same = os.path.abspath(root) == os.path.abspath(base)
+            genre = "" if same else os.path.basename(root)
+            for fn in files:
+                if not fn.startswith(".") and fn.lower().endswith(AUDIO_EXTS):
+                    on_disk.setdefault(fn, (usb["id"], genre))
+    changed = 0
+    for p, tr in lib["tracks"].items():
+        bn = os.path.basename(tr.get("path", p))
+        hit = on_disk.get(bn)
+        if hit:
+            new_usb, new_g = hit[0], (hit[1] or tr.get("genre", ""))
+            if tr.get("usb") != new_usb or tr.get("usb_genre") != new_g:
+                tr["usb"], tr["usb_genre"] = new_usb, new_g; changed += 1
+        elif tr.get("usb") in available:
+            # the drive is mounted but the file isn't there anymore -> stale marker
+            tr["usb"], tr["usb_genre"] = "", ""; changed += 1
+    return changed
+
 def all_tracks(lib):
     out = []
     for path in list(lib["tracks"].keys()):
@@ -719,8 +752,17 @@ class Handler(BaseHTTPRequestHandler):
             if folder not in lib.get("sources", []):
                 lib.setdefault("sources", []).append(folder)
             scan_folder(folder, lib, folder)
+            reconcile_usb(lib)                       # detect songs already sitting on a USB
+            active = get_active_usb(lib)
+            dups = 0
+            if active:
+                for p, tr in lib["tracks"].items():
+                    if tr.get("source") == folder and tr.get("usb") == active["id"]:
+                        dups += 1
             save_library(lib); payload = self._state_payload(lib)
             payload["added"] = folder
+            payload["usb_dups"] = dups
+            payload["usb_name"] = active["name"] if active else ""
         self._json(payload)
 
     def _route_api_rescan_all(self):
@@ -729,6 +771,7 @@ class Handler(BaseHTTPRequestHandler):
             for f in list(lib.get("sources", [])):
                 if os.path.isdir(f):
                     scan_folder(f, lib, f)
+            reconcile_usb(lib)
             save_library(lib); payload = self._state_payload(lib)
         self._json(payload)
 
@@ -741,6 +784,20 @@ class Handler(BaseHTTPRequestHandler):
                 if lib["tracks"][p].get("source") == folder:
                     del lib["tracks"][p]
             push_undo(snap, [], [], "remove folder", after=lib)
+            save_library(lib); payload = self._state_payload(lib)
+        self._json(payload)
+
+    def _route_api_remove_sources(self):
+        data = self._body(); folders = set(data.get("folders") or [])
+        if not folders:
+            self._json({"error": "No folders given."}, 400); return
+        with LIB_LOCK:
+            lib = load_library(); snap = copy.deepcopy(lib)
+            lib["sources"] = [s for s in lib.get("sources", []) if s not in folders]
+            for p in list(lib["tracks"].keys()):
+                if lib["tracks"][p].get("source") in folders:
+                    del lib["tracks"][p]
+            push_undo(snap, [], [], f"remove {len(folders)} folders", after=lib)
             save_library(lib); payload = self._state_payload(lib)
         self._json(payload)
 
@@ -802,6 +859,25 @@ class Handler(BaseHTTPRequestHandler):
                                         artist=tr.get("artist", ""), title=tr.get("title", ""))
                     touched.append(p)
             push_undo(snap, [], touched, "delete genre " + genre, after=lib)
+            save_library(lib); payload = self._state_payload(lib); payload["cleared"] = len(touched)
+        self._json(payload)
+
+    def _route_api_delete_genres(self):
+        data = self._body()
+        genres = set((g or "").strip() for g in (data.get("genres") or []) if (g or "").strip())
+        if not genres:
+            self._json({"error": "No genres given."}, 400); return
+        with LIB_LOCK:
+            lib = load_library(); snap = copy.deepcopy(lib); touched = []
+            for p, tr in lib["tracks"].items():
+                if (tr.get("genre") or "").strip() in genres:
+                    tr["genre"] = ""
+                    if os.path.isfile(p):
+                        write_file_tags(p, genre="", notes=tr.get("notes", ""),
+                                        struct=struct_for_track(tr, lib["fields"]),
+                                        artist=tr.get("artist", ""), title=tr.get("title", ""))
+                    touched.append(p)
+            push_undo(snap, [], touched, f"delete {len(genres)} genres", after=lib)
             save_library(lib); payload = self._state_payload(lib); payload["cleared"] = len(touched)
         self._json(payload)
 

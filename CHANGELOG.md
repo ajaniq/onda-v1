@@ -5,6 +5,62 @@ features' behavior** (cross-feature impacts). Newest first.
 
 ---
 
+## Batch 5 — rows, crates, group actions, duplicates
+
+### Added
+- **Row numbers** — a `#` column shows each track's position in the current view (updates
+  with sort/filter/search) so you can see how far down you are.
+- **Drag a folder onto Crates** — the Crates area is now a drop zone. Because the webview
+  sandbox hides a dropped folder's real path (unlike a native app such as Serato), the
+  drop opens the folder picker to confirm which folder to add as a crate.
+  - Cross-feature: existing track-onto-crate drops still work; the crate/USB drop handlers
+    now bail on OS file drags so they bubble to the zone handler.
+- **Group-select & delete genres (sidebar)** — click a genre to select, Shift-click for a
+  range; a bar shows "N selected · Delete · Clear". Deletes all selected genres in one
+  undoable action (`/api/delete_genres`). The per-genre ✕ and the filter checkbox are
+  unchanged and independent of selection.
+- **Group-remove folders** — a `⋯` button by the Folder dropdown opens a manager: check
+  folders (Shift-click for a range) and Remove selected in one undoable action
+  (`/api/remove_sources`).
+- **Duplicate-on-USB detection** — when you add/scan a folder, ONDA reconciles it against
+  your USBs; tracks already on the **active** USB keep their `▸ USB / genre` badge (the
+  "row badge"), and a **toast** (the small temporary message at the bottom) reports e.g.
+  "12 already on USB-1". *(A "count toast" = that bottom notification; a "row badge" = the
+  little ▸ label on the track row.)*
+
+### Changed
+- **Crate folders are hidden** from the top **Folder** dropdown (they belong in the Crates
+  sidebar). Applies to exact crate paths and anything nested under them.
+  - Cross-feature: `renderSrcBar()` and the folder manager share the same crate-filter.
+
+---
+
+## Batch 4 — player, progress, genre & rescan
+
+### Fixed
+- **Spacebar didn't always pause.** It now toggles play/pause even when a button has
+  focus (e.g. right after clicking ▶); only real text fields (`input`/`select`/`textarea`/
+  contenteditable) and open modals are excluded. A focused button is blurred after toggling.
+- **Seek thumb (circle) misaligned with the blue line.** Added
+  `-webkit-slider-runnable-track` / `-moz-range-track` rules and a `margin-top` on the
+  thumb so the 12px circle sits centered on the 4px fill line.
+
+### Added
+- **Progress bar now reflects the rows shown.** Denominator is the count of currently
+  visible rows (after filters/search), numerator is how many of those are on the active
+  USB — so it tracks whatever you're looking at, not the whole library.
+  - Cross-feature: `updateUsbProgress()` now reads `CURRENT_ROWS` (set in `render()`),
+    so it stays correct under search/filter/source changes.
+- **Genre autocomplete** while typing in a genre cell — native dropdown of existing
+  genres via a shared `<datalist id="genreOptions">` populated in `buildFilters()`.
+- **Rescan reconciles USB membership.** `reconcile_usb()` walks each USB folder and
+  marks/unmarks tracks by filename match, setting `usb_genre` from the sub-folder.
+  - Cross-feature: only clears markers for **mounted** USBs (unplugged drive ≠ wiped
+    membership). Feeds the genre USB dot, the row badge, and the progress bar. Runs at
+    the end of `rescan_all`.
+
+---
+
 ## Batch 3 — UX fixes & navigation
 
 ### Fixed

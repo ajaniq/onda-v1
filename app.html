@@ -81,9 +81,14 @@
   .sbsec h3:hover::before{color:var(--accent)}
   .sbsec.collapsed h3::before{content:'▸'}
   .sbsec.collapsed .sbbody{display:none}
-  .frow{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .frow{display:flex;align-items:center;justify-content:space-between;gap:6px;border-radius:3px;padding:1px 3px}
   .frow .xdel{color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px}
   .frow .xdel:hover{color:var(--bad)}
+  .frow .gpick{flex:1;font-size:12px;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .frow.gsel{background:var(--sel)}
+  .gselbar{display:flex;align-items:center;gap:8px;font-size:11px;margin:0 0 6px;padding:4px 6px;background:var(--inset);border:1px solid var(--line2);border-radius:3px}
+  .gselbar .gselact{color:var(--accent);cursor:pointer}
+  .gselbar .gselact:hover{text-decoration:underline}
   .chk{display:block;margin:3px 0;font-size:12px;cursor:pointer}
   .chk input{vertical-align:middle;margin-right:6px}
   .rangeRow{display:flex;align-items:center;gap:6px}
@@ -159,6 +164,11 @@
   #genreMenu .none{color:var(--muted);padding:6px 8px;font-size:11px}
   #colMenu .ci{display:block;padding:5px 8px;font-size:12px;cursor:pointer;border-radius:2px}
   #colMenu .ci:hover{background:var(--sel)}
+  #folderMenu .fmi{display:flex;align-items:center;gap:7px;padding:5px 8px;font-size:12px;cursor:pointer;border-radius:2px;user-select:none}
+  #folderMenu .fmi:hover{background:var(--sel)}
+  #folderMenu .fmfoot{display:flex;gap:8px;padding:6px 8px;border-top:1px solid var(--line2);margin-top:4px}
+  #folderMenu .fmact{color:var(--accent);cursor:pointer;font-size:11px}
+  #folderMenu .fmact.bad{color:var(--bad)}
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100}
   .dialog{background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:18px;width:300px;display:flex;flex-direction:column;gap:8px;max-height:88vh;overflow:auto}
   .dialog h4{margin:0 0 2px;font-size:13px} .dialog button{width:100%}
@@ -185,6 +195,9 @@
   .playerbar .np .a{color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #player{display:none}
   .pbbtn{background:var(--panel2);border:1px solid var(--line2);border-radius:50%;width:32px;height:32px;color:var(--accent);cursor:pointer;font-size:12px;flex:none;display:flex;align-items:center;justify-content:center;padding:0}
+  #crateZone{min-height:34px;border-radius:4px;border:1px dashed transparent;transition:.12s}
+  #crateZone.zonedrag{border-color:var(--accent);background:var(--inset)}
+  .rownum{color:var(--muted);font-size:10px;text-align:right;padding-right:8px}
   .usbprog{display:inline-flex;align-items:center;gap:6px;font-size:10px}
   .usbprogbar{width:90px;height:7px;background:var(--inset);border:1px solid var(--line2);border-radius:4px;overflow:hidden}
   .usbprogbar i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
@@ -199,8 +212,10 @@
   .pbbtn:hover{border-color:var(--accent)}
   .pbtime{font-size:11px;color:var(--muted);font-family:"SF Mono",Menlo,monospace;min-width:36px;text-align:center;flex:none}
   .pbseek{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;background:var(--line2);outline:none;cursor:pointer}
-  .pbseek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer;border:none}
-  .pbseek::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:none;cursor:pointer}
+  .pbseek::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:transparent}
+  .pbseek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;margin-top:-4px;border-radius:50%;background:var(--accent);cursor:pointer;border:none;box-shadow:0 0 0 2px var(--panel)}
+  .pbseek::-moz-range-track{height:4px;border-radius:2px;background:transparent}
+  .pbseek::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 0 2px var(--panel)}
   .crate .cfolder{color:var(--accent);display:flex;align-items:center;flex:none}
 </style>
 </head>
@@ -211,6 +226,7 @@
   <div class="usbbox" id="srcBox"><label>Folder</label>
     <select id="srcSel" onchange="setSource()" title="View all folders at once, or one folder at a time"><option value="">All folders</option></select>
     <button onclick="removeSource()" title="Remove the selected folder from the library (files stay on disk)">✕</button>
+    <button onclick="openFolderMenu(event)" title="Remove several folders at once">⋯</button>
   </div>
   <button onclick="rescan()" id="rescanBtn" disabled title="Re-read all loaded folders to pick up changes">Rescan</button>
   <button onclick="navBack()" id="navBack" disabled title="Back to the previous view (folder, search & filters)">‹</button>
@@ -234,9 +250,11 @@
   <aside>
     <div class="sbsec" data-sec="crates"><h3 onclick="toggleSec('crates')">Crates · drag tracks here</h3><div class="sbbody">
       <button onclick="newCrate()" style="width:100%;margin-bottom:6px" title="Make a crate folder (or add an existing one), then drag tracks onto it">＋ New crate</button>
-      <div id="crateTree"></div></div></div>
+      <div id="crateZone" ondragover="crateZoneOver(event)" ondragleave="crateZoneLeave()" ondrop="crateZoneDrop(event)" title="Drop a folder here to add it as a crate">
+        <div id="crateTree"></div></div></div></div>
     <div class="sbsec" data-sec="genre"><h3 onclick="toggleSec('genre')">Genre</h3><div class="sbbody">
       <button id="gcleanBtn" onclick="openGenreClean()" style="width:100%;margin-bottom:8px" title="Review &amp; merge duplicate genre spellings, or manually combine genres — always asks before changing">🧹 Clean genres…</button>
+      <div id="genreSelBar" class="gselbar" style="display:none"></div>
       <div id="fGenre"></div></div></div>
     <div class="sbsec" data-sec="energy"><h3 onclick="toggleSec('energy')">Energy</h3><div class="sbbody">
       <div class="rangeRow"><input type="number" id="eMin" min="0" max="10" placeholder="min" oninput="render()">
@@ -271,7 +289,9 @@
 </div>
 
 <div id="genreMenu" class="menu"></div>
+<datalist id="genreOptions"></datalist>
 <div id="colMenu" class="menu"></div>
+<div id="folderMenu" class="menu"></div>
 
 <div id="welcome" class="overlay" style="display:none">
   <div class="dialog" style="width:390px;align-items:center;text-align:center">
@@ -386,6 +406,7 @@
 <script>
 let TRACKS=[], FIELDS=[], USBS=[], ACTIVE_USB="";
 let SELECTED=new Set(), RATING_FILTER=0, NOW=null, CAN_UNDO=false, CAN_REDO=false, GMENU_OWNER=null;
+let GENRE_SEL=new Set(), GENRE_ORDER=[], GENRE_LAST=null;
 let COLS={}; try{COLS=JSON.parse(localStorage.getItem('djlib-cols')||'{}');}catch(e){COLS={};}
 let COLW={}; try{COLW=JSON.parse(localStorage.getItem('djlib-colw')||'{}');}catch(e){COLW={};}
 let KEY_MODE=localStorage.getItem('djlib-keymode')||'camelot';
@@ -559,8 +580,12 @@ function applyState(s){
 function renderSrcBar(){
   const sel=document.getElementById('srcSel');
   const base=p=>p.replace(/\/+$/,'').split('/').pop()||p;
-  sel.innerHTML=`<option value="">All folders${SOURCES.length?` (${SOURCES.length})`:''}</option>`+
-    SOURCES.map(p=>`<option value="${esc(p)}" ${p===CURRENT_SOURCE?'selected':''} title="${esc(p)}">${esc(base(p))}</option>`).join('');
+  // hide crate folders from the Folder list (they live in the Crates sidebar)
+  const crateP=(CRATES||[]).map(c=>c.path);
+  const isCrate=p=>crateP.some(cp=>p===cp||p.startsWith(cp.replace(/\/+$/,'')+'/'));
+  const srcs=SOURCES.filter(p=>!isCrate(p));
+  sel.innerHTML=`<option value="">All folders${srcs.length?` (${srcs.length})`:''}</option>`+
+    srcs.map(p=>`<option value="${esc(p)}" ${p===CURRENT_SOURCE?'selected':''} title="${esc(p)}">${esc(base(p))}</option>`).join('');
 }
 function setSource(){CURRENT_SOURCE=document.getElementById('srcSel').value;SELECTED.clear();LAST_IDX=null;render();}
 async function removeSource(){
@@ -659,13 +684,25 @@ document.addEventListener('dragend',()=>{DRAG_PATHS=[];});
 /* let you select text in title/artist/etc.: only drag the row when grabbing a non-input area */
 document.addEventListener('mousedown',e=>{const tr=e.target.closest&&e.target.closest('#tableWrap tbody tr');
   if(!tr)return; tr.draggable=!e.target.closest('input,select,textarea,button,.stars,.keychip,.pill');},true);
-function crateOver(e,el){e.preventDefault();el.classList.add('dragover');e.dataTransfer.dropEffect='copy';}
-async function crateDropEv(e,el){e.preventDefault();el.classList.remove('dragover');
-  const dest=el.getAttribute('data-path'); if(!DRAG_PATHS.length)return;
+function crateOver(e,el){if(!DRAG_PATHS.length)return;e.preventDefault();el.classList.add('dragover');e.dataTransfer.dropEffect='copy';}
+async function crateDropEv(e,el){if(!DRAG_PATHS.length)return;e.preventDefault();el.classList.remove('dragover');
+  const dest=el.getAttribute('data-path');
   const r=await api('/api/crate_drop',{paths:DRAG_PATHS,dest});
   if(r.error){toast(r.error);return;}
   applyState(r);buildFilters();render();
   toast(`${r.mode==='move'?'Moved':'Copied'} ${r.dropped||0} into ${dest.split('/').pop()}`);
+}
+/* dropping a FOLDER (from Finder) onto the Crates area -> open the picker to add it.
+   Webview sandboxing hides the dropped folder's real path, so we confirm via the picker. */
+function _hasFiles(e){return [...((e.dataTransfer&&e.dataTransfer.types)||[])].includes('Files');}
+function crateZoneOver(e){if(DRAG_PATHS.length||!_hasFiles(e))return;e.preventDefault();
+  e.dataTransfer.dropEffect='copy';document.getElementById('crateZone').classList.add('zonedrag');}
+function crateZoneLeave(){const z=document.getElementById('crateZone');if(z)z.classList.remove('zonedrag');}
+async function crateZoneDrop(e){if(DRAG_PATHS.length||!_hasFiles(e))return;e.preventDefault();crateZoneLeave();
+  toast('Choose the folder to add as a crate…');
+  const r=await api('/api/add_crate',{name:'',use_existing:true});
+  if(r.cancelled){toast('No folder chosen');return;} if(r.error){toast(r.error);return;}
+  CRATES=r.crates||CRATES;renderCrates();renderSrcBar();setCanUndo(r.can_undo);setCanRedo(r.can_redo);toast('Crate added');
 }
 function usbOver(e){if(!DRAG_PATHS.length)return;e.preventDefault();document.getElementById('usbBox').classList.add('dragover');e.dataTransfer.dropEffect='copy';}
 function usbDrop(e){e.preventDefault();document.getElementById('usbBox').classList.remove('dragover');
@@ -678,7 +715,8 @@ async function rescan(){toast('Rescanning…');const r=await api('/api/rescan_al
 async function scan(folder){toast('Scanning…');const r=await api('/api/scan',{folder});if(r.error){toast(r.error);return;}
   if(r.added)CURRENT_SOURCE=r.added;        // jump to the folder you just added
   applyState(r);SELECTED.clear();LAST_IDX=null;buildFilters();render();
-  toast(`Loaded ${TRACKS.length} tracks · viewing this folder`);}
+  if(r.usb_dups){toast(`Loaded ${TRACKS.length} tracks · ${r.usb_dups} already on ${r.usb_name||'the active USB'} (marked with a ▸ badge)`);}
+  else {toast(`Loaded ${TRACKS.length} tracks · viewing this folder`);}}
 
 /* filters */
 function uniq(a){return [...new Set(a.filter(x=>x!==''&&x!=null))].sort();}
@@ -691,8 +729,10 @@ function buildFilters(){
   refreshUsbSet();
   const keepG=new Set(checkedVals('fg')), keepK=new Set(checkedVals('fk')), keepT=new Set(checkedVals('ft'));
   const gen=genreList();
+  GENRE_ORDER=gen; GENRE_SEL=new Set([...GENRE_SEL].filter(x=>gen.includes(x)));
   document.getElementById('fGenre').innerHTML=gen.length?gen.map(g=>
-    `<div class="frow"><label class="chk"><input type="checkbox" class="fg" value="${esc(g)}" onchange="render()"> ${esc(g)} ${usbDot(g)}</label>`+
+    `<div class="frow" data-g="${escAttr(g)}"><input type="checkbox" class="fg" value="${esc(g)}" onchange="render()" title="Filter the list by this genre">`+
+    `<span class="gpick" onclick="markGenre(event,'${escAttr(g)}')" title="Click to select; Shift-click for a range; then Delete selected">${esc(g)} ${usbDot(g)}</span>`+
     `<span class="xdel" title="Delete this genre everywhere" onclick="deleteGenre(event,'${escAttr(g)}')">✕</span></div>`).join(''):'<span class="muted">—</span>';
   const kids=uniq(TRACKS.map(t=>keyId(t.key)));
   document.getElementById('fKey').innerHTML=kids.length?kids.map(kid=>
@@ -700,10 +740,37 @@ function buildFilters(){
   const tags=uniq([].concat(...TRACKS.map(t=>t.tags||[])));
   document.getElementById('fTags').innerHTML=tags.length?tags.map(tg=>
     `<label class="chk"><input type="checkbox" class="ft" value="${esc(tg)}" onchange="render()"> ${esc(tg)}</label>`).join(''):'<span class="muted">—</span>';
+  const dl=document.getElementById('genreOptions');
+  if(dl)dl.innerHTML=gen.map(g=>`<option value="${esc(g)}">`).join('');
   document.querySelectorAll('.fg').forEach(c=>{if(keepG.has(c.value))c.checked=true;});
   document.querySelectorAll('.fk').forEach(c=>{if(keepK.has(c.value))c.checked=true;});
   document.querySelectorAll('.ft').forEach(c=>{if(keepT.has(c.value))c.checked=true;});
+  reflectGenreSel();
   renderRatingFilter();
+}
+/* sidebar genre multi-select (shift-click) + group delete */
+function markGenre(e,g){
+  if(e.shiftKey && GENRE_LAST){
+    const a=GENRE_ORDER.indexOf(GENRE_LAST), b=GENRE_ORDER.indexOf(g);
+    if(a>=0&&b>=0){const lo=Math.min(a,b),hi=Math.max(a,b);for(let k=lo;k<=hi;k++)GENRE_SEL.add(GENRE_ORDER[k]);}
+  } else { GENRE_SEL.has(g)?GENRE_SEL.delete(g):GENRE_SEL.add(g); }
+  GENRE_LAST=g; reflectGenreSel();
+}
+function reflectGenreSel(){
+  document.querySelectorAll('#fGenre .frow').forEach(r=>r.classList.toggle('gsel',GENRE_SEL.has(r.getAttribute('data-g'))));
+  const bar=document.getElementById('genreSelBar'); if(!bar)return;
+  const n=GENRE_SEL.size;
+  if(!n){bar.style.display='none';bar.innerHTML='';return;}
+  bar.style.display='flex';
+  bar.innerHTML=`<span>${n} selected</span><span class="spacer"></span><span class="gselact" onclick="deleteSelectedGenres()">🗑 Delete</span><span class="gselact" onclick="clearGenreSel()">Clear</span>`;
+}
+function clearGenreSel(){GENRE_SEL.clear();GENRE_LAST=null;reflectGenreSel();}
+async function deleteSelectedGenres(){
+  const gs=[...GENRE_SEL]; if(!gs.length)return;
+  if(!confirm(`Delete ${gs.length} genre(s) from ALL tracks?\nTheir genre will be cleared (files already on a USB stay where they are).`))return;
+  const r=await api('/api/delete_genres',{genres:gs}); if(r.error){toast(r.error);return;}
+  GENRE_SEL.clear();GENRE_LAST=null;
+  applyState(r);buildFilters();render();toast(`Cleared ${gs.length} genre(s) from ${r.cleared||0} track(s)`);
 }
 function renderRatingFilter(){let h='';for(let i=1;i<=5;i++)h+=`<span onclick="setRatingFilter(${i})" class="${i<=RATING_FILTER?'on':''}">★</span>`;
   h+=` <span class="muted" style="font-size:10px;cursor:pointer" onclick="setRatingFilter(0)">clear</span>`;
@@ -863,11 +930,12 @@ function colDefs(){
     {key:'play',always:1,th:'',cell:(t,i)=>{const playing=NOW===t.path&&!player.paused;
       return `<td><button class="play${playing?' on':''}" onclick="playTrack(${i})">${playing?'❚❚':'▶'}</button></td>`;}},
     {key:'sel',always:1,th:'',cell:(t,i,di)=>`<td><input type="checkbox" ${SELECTED.has(t.path)?'checked':''} onclick="rowCheck(event,${di},'${escAttr(t.path)}')"></td>`},
+    {key:'num',always:1,th:'#',cell:(t,i,di)=>`<td class="ro mono rownum">${di+1}</td>`},
     {key:'cover',th:'Art',cell:(t)=>`<td><div class="coverbox"><span class="ph">♪</span><img class="cover" src="/cover?path=${encodeURIComponent(t.path)}" loading="lazy" onerror="this.classList.add('nope')"></div></td>`},
     {key:'track',always:1,th:'Track',sortKey:'title',cell:trackCell},
     {key:'genre',th:'Genre',sortKey:'genre',cell:(t,i)=>`<td><div class="genrewrap">
         ${genreOnUsb(t.genre)?'<span class="usbdot" title="This genre is on the active USB"></span>':''}
-        <input class="cell" value="${esc(t.genre||'')}" onchange="setGenre(${i},this.value)" placeholder="genre">
+        <input class="cell" list="genreOptions" value="${esc(t.genre||'')}" onchange="setGenre(${i},this.value)" placeholder="genre">
         <button class="gbtn" onclick="openGenreMenu(event,${i})" title="Pick / delete existing genres">▾</button></div></td>`},
     {key:'energy',th:'En',sortKey:'energy',cell:(t,i)=>{let eo='<option value="0"></option>';for(let e=1;e<=10;e++)eo+=`<option value="${e}" ${t.energy==e?'selected':''}>${e}</option>`;
         return `<td><select class="cell" onchange="setField(${i},'energy',parseInt(this.value))">${eo}</select></td>`;}},
@@ -942,9 +1010,10 @@ function updateCount(){const shown=TRACKS.filter(passes).length;
 function updateUsbProgress(){
   const fill=document.getElementById('usbProgFill'),txt=document.getElementById('usbProgTxt');
   if(!fill||!txt)return;
-  const total=TRACKS.length;
+  const total=CURRENT_ROWS.length;   // out of the songs currently shown in the rows
   if(!ACTIVE_USB||!total){fill.style.width='0';txt.textContent=ACTIVE_USB?'0 on USB':'no active USB';return;}
-  const on=TRACKS.filter(t=>t.usb===ACTIVE_USB).length;
+  const byPath=new Map(TRACKS.map(t=>[t.path,t]));
+  let on=0; CURRENT_ROWS.forEach(p=>{const t=byPath.get(p); if(t&&t.usb===ACTIVE_USB)on++;});
   const u=USBS.find(x=>x.id===ACTIVE_USB);
   fill.style.width=(on/total*100)+'%';
   txt.textContent=`${on}/${total} on ${u?u.name:'USB'}`;}
@@ -1012,6 +1081,34 @@ function openColMenu(ev){ev.stopPropagation();const m=document.getElementById('c
   const r=ev.target.getBoundingClientRect();m.style.left=Math.max(8,r.right-190)+'px';m.style.top=(r.bottom+4)+'px';m.style.display='block';}
 function toggleCol(k,on){COLS[k]=on;localStorage.setItem('djlib-cols',JSON.stringify(COLS));render();}
 
+/* folder manager: select multiple folders (shift-click) and remove together */
+let FOLDER_SEL=new Set(), FOLDER_ORDER=[], FOLDER_LAST=null;
+function _folderList(){const crateP=(CRATES||[]).map(c=>c.path);
+  const isCrate=p=>crateP.some(cp=>p===cp||p.startsWith(cp.replace(/\/+$/,'')+'/'));
+  return SOURCES.filter(p=>!isCrate(p));}
+function openFolderMenu(ev){ev.stopPropagation();const m=document.getElementById('folderMenu');
+  if(m.style.display==='block'){m.style.display='none';return;}
+  FOLDER_ORDER=_folderList(); FOLDER_SEL=new Set([...FOLDER_SEL].filter(x=>FOLDER_ORDER.includes(x))); FOLDER_LAST=null;
+  renderFolderMenu();
+  const r=ev.target.getBoundingClientRect();m.style.left=Math.max(8,r.right-220)+'px';m.style.top=(r.bottom+4)+'px';m.style.display='block';}
+function renderFolderMenu(){const m=document.getElementById('folderMenu');
+  const base=p=>p.replace(/\/+$/,'').split('/').pop()||p;
+  if(!FOLDER_ORDER.length){m.innerHTML='<div class="fmi" style="cursor:default;color:var(--muted)">No folders loaded.</div>';return;}
+  m.innerHTML=FOLDER_ORDER.map(p=>`<div class="fmi" data-f="${escAttr(p)}" onclick="markFolder(event,'${escAttr(p)}')" title="${esc(p)}"><input type="checkbox" ${FOLDER_SEL.has(p)?'checked':''} tabindex="-1" style="pointer-events:none"> <span>${esc(base(p))}</span></div>`).join('')
+    +`<div class="fmfoot"><span>${FOLDER_SEL.size} selected</span><span class="spacer"></span><span class="fmact bad" onclick="removeSelectedFolders()">Remove selected</span></div>`;}
+function markFolder(e,f){e.stopPropagation();
+  if(e.shiftKey && FOLDER_LAST){const a=FOLDER_ORDER.indexOf(FOLDER_LAST),b=FOLDER_ORDER.indexOf(f);
+    if(a>=0&&b>=0){const lo=Math.min(a,b),hi=Math.max(a,b);for(let k=lo;k<=hi;k++)FOLDER_SEL.add(FOLDER_ORDER[k]);}}
+  else { FOLDER_SEL.has(f)?FOLDER_SEL.delete(f):FOLDER_SEL.add(f); }
+  FOLDER_LAST=f; renderFolderMenu();}
+async function removeSelectedFolders(){
+  const fs=[...FOLDER_SEL]; if(!fs.length){toast('Pick folders first');return;}
+  if(!confirm(`Remove ${fs.length} folder(s) from the library?\n(The folders and their files stay on disk.)`))return;
+  const r=await api('/api/remove_sources',{folders:fs}); if(r.error){toast(r.error);return;}
+  FOLDER_SEL.clear();FOLDER_LAST=null;document.getElementById('folderMenu').style.display='none';
+  if(fs.includes(CURRENT_SOURCE))CURRENT_SOURCE='';
+  applyState(r);buildFilters();render();toast(`Removed ${fs.length} folder(s)`);}
+
 /* genre menu */
 function openGenreMenu(ev,i){ev.stopPropagation();const menu=document.getElementById('genreMenu');
   if(menu.style.display==='block'&&GMENU_OWNER===i){menu.style.display='none';GMENU_OWNER=null;return;}
@@ -1025,8 +1122,8 @@ async function deleteGenre(ev,g){ev.stopPropagation();document.getElementById('g
   if(!confirm('Delete genre "'+g+'" from ALL tracks?\nTheir genre will be cleared (files already in a USB stay where they are).'))return;
   const r=await api('/api/delete_genre',{genre:g});if(r.error){toast(r.error);return;}
   applyState(r);buildFilters();render();toast(`Cleared genre "${g}" from ${r.cleared||0} track(s)`);}
-document.addEventListener('click',e=>{['genreMenu','colMenu'].forEach(id=>{const m=document.getElementById(id);
-  if(m.style.display==='block'&&!m.contains(e.target)){m.style.display='none';if(id==='genreMenu')GMENU_OWNER=null;}});});
+document.addEventListener('click',e=>{['genreMenu','colMenu','folderMenu'].forEach(id=>{const m=document.getElementById(id);
+  if(m&&m.style.display==='block'&&!m.contains(e.target)){m.style.display='none';if(id==='genreMenu')GMENU_OWNER=null;}});});
 
 /* edits */
 function setField(i,k,v){TRACKS[i][k]=v;queueSave(TRACKS[i]);}
@@ -1144,12 +1241,14 @@ player.addEventListener('ended',()=>{NOW=null;pbUpdate();updatePlayingUI();});
 document.addEventListener('keydown',e=>{
   if(e.code!=='Space'&&e.key!==' ')return;
   const t=e.target;
-  if(t&&(t.matches&&t.matches('input,select,textarea,button')||t.isContentEditable))return;
+  // ignore only when typing in a field (buttons are fine — space should still play/pause)
+  if(t&&((t.matches&&t.matches('input,select,textarea'))||t.isContentEditable))return;
   // don't hijack space while a modal/overlay is open
   for(const id of ['welcome','settings','help','genreClean','usbModal']){
     const m=document.getElementById(id); if(m&&m.style.display!=='none'&&m.offsetParent!==null)return;}
   if(!player.src)return;
   e.preventDefault(); pbToggle();
+  if(t&&t.blur&&t.tagName==='BUTTON')t.blur();
 });
 
 /* utils */
