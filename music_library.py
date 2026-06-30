@@ -1,9 +1,32 @@
 #!/usr/bin/env python3
 """DJ Music Library - local web app backend (tagging, USB hubs, cover art,
-bitrate, Camelot keys, undo). See README. Start: python3 music_library.py"""
+bitrate, Camelot keys, undo). See README. Start: python3 music_library.py
+
+================================================================================
+ ONDA BACKEND - TABLE OF CONTENTS
+================================================================================
+ To change a behavior, jump to its section (search for the §N banner):
+
+   §1  PATHS & CONSTANTS .......... where files live, audio extensions, globals
+   §2  LIBRARY STORE .............. load/save the JSON library, safe filenames
+   §3  GENRE NORMALIZATION ........ aliases, canonical names, fuzzy matching
+   §4  UNDO / REDO ................ the undo & redo stacks + push_undo()
+   §5  FILE TAGS & COVER ART ...... read/write ID3-MP4-Vorbis tags, cover images
+   §6  USB FILING & CRATES ........ send-to-USB, reconcile membership, crate tree
+   §7  SCANNING & TRACK BUILDING .. walk folders, build track records
+   §8  CUSTOM FIELDS .............. user-defined columns <-> embedded struct
+   §9  NATIVE DIALOGS & EXPORT .... folder pickers, text prompts, flat export
+   §10 HTTP SERVER & API ROUTES ... the Handler class; one _route_api_* per call
+   §11 SERVER BOOTSTRAP / main() .. port pick, native window, startup
+================================================================================
+"""
 
 import os, re, sys, copy, json, uuid, shutil, socket, mimetypes, subprocess, threading, webbrowser, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# ============================================================================
+# §1  PATHS & CONSTANTS
+# ============================================================================
 
 def script_dir():
     return os.path.dirname(os.path.abspath(__file__))
@@ -41,6 +64,9 @@ UNDO = []
 REDO = []
 UNDO_MAX = 40
 
+# ============================================================================
+# §2  LIBRARY STORE  (load/save the JSON library on disk; safe filenames)
+# ============================================================================
 def default_library():
     return {"folder": "", "sources": [], "fields": [], "tracks": {}, "usbs": [], "active_usb": "",
             "auto_file": False, "usb_mode": "copy", "crate_base": "", "crates": []}
@@ -69,6 +95,9 @@ def safe_name(name):
 
 # ---- genre normalization (alias-based; never collapses sub-genres) ----
 # variant (normalized) -> canonical normalized key. Only unambiguous synonyms.
+# ============================================================================
+# §3  GENRE NORMALIZATION  (aliases, canonical display names, fuzzy matching)
+# ============================================================================
 GENRE_ALIASES = {
     "dnb": "drum and bass", "d n b": "drum and bass", "drum n bass": "drum and bass",
     "drum bass": "drum and bass",
@@ -132,6 +161,9 @@ def _lev(a, b):
         prev = cur
     return prev[len(b)]
 
+# ============================================================================
+# §4  UNDO / REDO  (snapshot-based; each entry stores before/after + file ops)
+# ============================================================================
 def push_undo(snapshot, moves, touched, label, copies=None, after=None, dirs=None):
     # moves: [[new, old]...]  copies: [[src, dst]...]  dirs: [created dirs]
     UNDO.append({"before": snapshot, "after": copy.deepcopy(after) if after is not None else None,
@@ -151,6 +183,9 @@ def _norm_copies(copies):
             out.append([None, c])
     return out
 
+# ============================================================================
+# §5  FILE TAGS & COVER ART  (read/write ID3 / MP4 / Vorbis; embedded cover)
+# ============================================================================
 def _require_mutagen():
     try:
         import mutagen  # noqa
@@ -337,6 +372,9 @@ def get_cover(path):
         pass
     return None, None
 
+# ============================================================================
+# §6  USB FILING & CRATES  (send to USB, reconcile membership, crate tree)
+# ============================================================================
 def get_active_usb(lib):
     aid = lib.get("active_usb")
     for u in lib.get("usbs", []):
@@ -463,6 +501,9 @@ def crates_payload(lib):
             out.append(node)
     return out
 
+# ============================================================================
+# §7  SCANNING & TRACK BUILDING  (walk folders, build/refresh track records)
+# ============================================================================
 def _build_track(path, lib, source=None):
     finfo = read_file_tags(path)
     notes_f, struct_f = _parse_comment(finfo.get("comment", ""))
@@ -548,6 +589,9 @@ def all_tracks(lib):
     out.sort(key=lambda t: (t.get("title") or t.get("filename") or "").lower())
     return out
 
+# ============================================================================
+# §8  CUSTOM FIELDS  (user-defined columns <-> values embedded in the comment)
+# ============================================================================
 def _to_int(v):
     try:
         return int(v)
@@ -579,6 +623,9 @@ def struct_for_track(track, fields):
             struct["cf_" + fdef["name"]] = val
     return struct
 
+# ============================================================================
+# §9  NATIVE DIALOGS & EXPORT  (macOS folder pickers, text prompts, flat export)
+# ============================================================================
 def _asc(s):
     return str(s).replace("\\", "\\\\").replace('"', '\\"')
 
@@ -626,6 +673,11 @@ def export_tracks(paths, dest_parent, folder_name):
             errors.append(f"{os.path.basename(p)}: {e}")
     return {"copied": copied, "target": target, "errors": errors}
 
+# ============================================================================
+# §10  HTTP SERVER & API ROUTES
+#   The Handler dispatches POST /api/<name> to a method named _route_api_<name>
+#   (see do_POST). To add an endpoint, add one _route_api_<name>(self) method.
+# ============================================================================
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -1053,6 +1105,7 @@ class Handler(BaseHTTPRequestHandler):
                         shutil.copy2(p, d); copies.append([p, d]); count += 1
                 except Exception:
                     pass
+            reconcile_usb(lib)   # if the crate lives on a USB, show the badge immediately
             if moves or copies:
                 push_undo(snap, moves, [], f"drop {count} into crate", copies, after=lib)
             save_library(lib); payload = self._state_payload(lib); payload["dropped"] = count; payload["mode"] = mode
@@ -1241,7 +1294,60 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"cancelled": True}); return
         self._json(export_tracks(paths, parent, name))
 
+    def _route_api_export_folders(self):
+        """Copy every track from one or more folders into a single flat folder,
+        ready to drop into Serato / rekordbox."""
+        data = self._body(); folders = set(data.get("folders") or [])
+        if not folders:
+            self._json({"error": "No folders given."}, 400); return
+        with LIB_LOCK:
+            lib = load_library()
+            paths = []
+            for p, tr in lib["tracks"].items():
+                src = tr.get("source")
+                if src in folders or any(p.startswith(f.rstrip(os.sep) + os.sep) for f in folders):
+                    if os.path.isfile(p):
+                        paths.append(p)
+        if not paths:
+            self._json({"error": "No tracks found in those folders."}, 400); return
+        parent = data.get("dest_parent")
+        if not parent:
+            parent = choose_folder("Choose where to create the export folder:")
+            if not parent:
+                self._json({"cancelled": True}); return
+        name = data.get("folder_name")
+        if not name:
+            name = prompt_text("Name this export folder:", "ONDA Export")
+            if not name:
+                self._json({"cancelled": True}); return
+        self._json(export_tracks(paths, parent, name))
 
+    def _route_api_set_genre_bulk(self):
+        """Set the same genre on many tracks at once (one undo step)."""
+        data = self._body()
+        paths = data.get("paths", []); genre = (data.get("genre") or "").strip()
+        if not paths:
+            self._json({"error": "No tracks selected."}, 400); return
+        with LIB_LOCK:
+            lib = load_library(); snap = copy.deepcopy(lib); touched = []
+            for p in paths:
+                tr = lib["tracks"].get(p)
+                if not tr:
+                    continue
+                tr["genre"] = genre
+                if os.path.isfile(p):
+                    write_file_tags(p, genre=genre, notes=tr.get("notes", ""),
+                                    struct=struct_for_track(tr, lib["fields"]),
+                                    artist=tr.get("artist", ""), title=tr.get("title", ""))
+                touched.append(p)
+            push_undo(snap, [], touched, f"set genre on {len(touched)}", after=lib)
+            save_library(lib); payload = self._state_payload(lib); payload["changed"] = len(touched)
+        self._json(payload)
+
+
+# ============================================================================
+# §11  SERVER BOOTSTRAP / main()  (pick a port, open native window, run)
+# ============================================================================
 def find_free_port(preferred=8765):
     for port in [preferred] + list(range(8766, 8810)):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

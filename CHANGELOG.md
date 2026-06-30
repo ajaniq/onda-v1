@@ -5,6 +5,38 @@ features' behavior** (cross-feature impacts). Newest first.
 
 ---
 
+## Batch 6 — export, bulk genre, faster updates, backend reorg
+
+### Added
+- **Export many folders → one flat folder** — in the folder manager (`⋯`), select folders
+  and hit **Export**; all their tracks are copied into one folder you pick, ready to drop
+  into Serato/rekordbox. Flat layout (no subfolders), via `/api/export_folders`.
+- **Bulk set genre** — a **Set genre…** toolbar button applies one genre to every selected
+  track in a single undoable action (`/api/set_genre_bulk`). Pairs with "Select all shown".
+  Flushes pending edits first (same guard as Send → USB).
+
+### Changed
+- **Folder manager matches the genre sidebar** — click to select, Shift-click for a range,
+  highlight instead of checkboxes, footer actions **Export · Remove · Clear**.
+- **Faster auto-update (less need for Rescan)** — `crate_drop` now runs `reconcile_usb`, so
+  dropping a song into a crate that lives on a USB shows the `▸ USB / folder` badge
+  immediately. Genre edits already refresh the sidebar live.
+  - Cross-feature: any path that moves/copies files into a USB-backed location should call
+    `reconcile_usb(lib)` before saving so membership stays live.
+
+### Confirmed
+- **Undo for deleting a genre** works (single via the ✕, and group via the sidebar bar);
+  both push an undo entry that restores the cleared genres and re-embeds tags. Toasts now
+  say "↩ to undo".
+
+### Backend
+- **`music_library.py` reorganized into 11 labeled sections** with a table of contents at
+  the top (search `§1`…`§11`). No code split — same single file, same launcher/build — but
+  a dev can jump straight to, e.g., `§6 USB FILING & CRATES`. Verified the module imports
+  cleanly with all routes intact.
+
+---
+
 ## Batch 5 — rows, crates, group actions, duplicates
 
 ### Added

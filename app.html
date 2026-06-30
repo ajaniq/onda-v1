@@ -166,6 +166,7 @@
   #colMenu .ci:hover{background:var(--sel)}
   #folderMenu .fmi{display:flex;align-items:center;gap:7px;padding:5px 8px;font-size:12px;cursor:pointer;border-radius:2px;user-select:none}
   #folderMenu .fmi:hover{background:var(--sel)}
+  #folderMenu .fmi.fmsel{background:var(--sel)}
   #folderMenu .fmfoot{display:flex;gap:8px;padding:6px 8px;border-top:1px solid var(--line2);margin-top:4px}
   #folderMenu .fmact{color:var(--accent);cursor:pointer;font-size:11px}
   #folderMenu .fmact.bad{color:var(--bad)}
@@ -281,6 +282,7 @@
       <button onclick="resetCols()" title="Reset all column widths back to default">Reset cols</button>
       <button onclick="addField()" title="Add your own column (e.g. Mood, Vibe, Set position)">+ Field</button>
       <button onclick="manageFields()" title="Remove a custom field">Manage fields</button>
+      <button onclick="setGenreSelected()" title="Set the same genre on every selected track">Set genre…</button>
       <button onclick="sendSelected()" title="File the selected tracks into the active USB by genre">▸ Send → USB</button>
       <button class="go" onclick="exportSelected()" title="Copy the selected tracks into a brand-new folder (for a set)">Copy → folder</button>
     </div>
@@ -770,7 +772,7 @@ async function deleteSelectedGenres(){
   if(!confirm(`Delete ${gs.length} genre(s) from ALL tracks?\nTheir genre will be cleared (files already on a USB stay where they are).`))return;
   const r=await api('/api/delete_genres',{genres:gs}); if(r.error){toast(r.error);return;}
   GENRE_SEL.clear();GENRE_LAST=null;
-  applyState(r);buildFilters();render();toast(`Cleared ${gs.length} genre(s) from ${r.cleared||0} track(s)`);
+  applyState(r);buildFilters();render();toast(`Cleared ${gs.length} genre(s) from ${r.cleared||0} track(s) · ↩ to undo`);
 }
 function renderRatingFilter(){let h='';for(let i=1;i<=5;i++)h+=`<span onclick="setRatingFilter(${i})" class="${i<=RATING_FILTER?'on':''}">★</span>`;
   h+=` <span class="muted" style="font-size:10px;cursor:pointer" onclick="setRatingFilter(0)">clear</span>`;
@@ -1094,8 +1096,17 @@ function openFolderMenu(ev){ev.stopPropagation();const m=document.getElementById
 function renderFolderMenu(){const m=document.getElementById('folderMenu');
   const base=p=>p.replace(/\/+$/,'').split('/').pop()||p;
   if(!FOLDER_ORDER.length){m.innerHTML='<div class="fmi" style="cursor:default;color:var(--muted)">No folders loaded.</div>';return;}
-  m.innerHTML=FOLDER_ORDER.map(p=>`<div class="fmi" data-f="${escAttr(p)}" onclick="markFolder(event,'${escAttr(p)}')" title="${esc(p)}"><input type="checkbox" ${FOLDER_SEL.has(p)?'checked':''} tabindex="-1" style="pointer-events:none"> <span>${esc(base(p))}</span></div>`).join('')
-    +`<div class="fmfoot"><span>${FOLDER_SEL.size} selected</span><span class="spacer"></span><span class="fmact bad" onclick="removeSelectedFolders()">Remove selected</span></div>`;}
+  // same interaction as the sidebar genre list: click to select, shift-click for a range
+  m.innerHTML=FOLDER_ORDER.map(p=>`<div class="fmi${FOLDER_SEL.has(p)?' fmsel':''}" data-f="${escAttr(p)}" onclick="markFolder(event,'${escAttr(p)}')" title="${esc(p)}"><span>${esc(base(p))}</span></div>`).join('')
+    +`<div class="fmfoot"><span>${FOLDER_SEL.size} selected</span><span class="spacer"></span><span class="fmact" onclick="exportSelectedFolders()">Export</span><span class="fmact bad" onclick="removeSelectedFolders()">Remove</span><span class="fmact" onclick="clearFolderSel()">Clear</span></div>`;}
+function clearFolderSel(){FOLDER_SEL.clear();FOLDER_LAST=null;renderFolderMenu();}
+async function exportSelectedFolders(){
+  const fs=[...FOLDER_SEL]; if(!fs.length){toast('Pick folders first');return;}
+  toast('Choose where to export in the dialog…');
+  const r=await api('/api/export_folders',{folders:fs});
+  if(r.cancelled){toast('Cancelled');return;} if(r.error){toast(r.error);return;}
+  document.getElementById('folderMenu').style.display='none';
+  toast(`Exported ${r.copied} tracks → ${r.target.split('/').pop()}`);}
 function markFolder(e,f){e.stopPropagation();
   if(e.shiftKey && FOLDER_LAST){const a=FOLDER_ORDER.indexOf(FOLDER_LAST),b=FOLDER_ORDER.indexOf(f);
     if(a>=0&&b>=0){const lo=Math.min(a,b),hi=Math.max(a,b);for(let k=lo;k<=hi;k++)FOLDER_SEL.add(FOLDER_ORDER[k]);}}
@@ -1121,7 +1132,7 @@ function pickGenre(i,g){document.getElementById('genreMenu').style.display='none
 async function deleteGenre(ev,g){ev.stopPropagation();document.getElementById('genreMenu').style.display='none';GMENU_OWNER=null;
   if(!confirm('Delete genre "'+g+'" from ALL tracks?\nTheir genre will be cleared (files already in a USB stay where they are).'))return;
   const r=await api('/api/delete_genre',{genre:g});if(r.error){toast(r.error);return;}
-  applyState(r);buildFilters();render();toast(`Cleared genre "${g}" from ${r.cleared||0} track(s)`);}
+  applyState(r);buildFilters();render();toast(`Cleared genre "${g}" from ${r.cleared||0} track(s) · ↩ to undo`);}
 document.addEventListener('click',e=>{['genreMenu','colMenu','folderMenu'].forEach(id=>{const m=document.getElementById(id);
   if(m&&m.style.display==='block'&&!m.contains(e.target)){m.style.display='none';if(id==='genreMenu')GMENU_OWNER=null;}});});
 
@@ -1176,6 +1187,14 @@ async function sendToUsb(paths){
   toast(`Sent ${moved} to ${r.usb}`+(skip?` · ${skip} skipped (set a genre first)`:''));}
 function sendOne(i){sendToUsb([TRACKS[i].path]);}
 function sendSelected(){if(SELECTED.size===0){toast('Select some tracks first');return;}sendToUsb([...SELECTED]);}
+async function setGenreSelected(){
+  if(SELECTED.size===0){toast('Select tracks first (try “Select all shown”)');return;}
+  const g=prompt(`Set genre for ${SELECTED.size} selected track(s) — type a genre (blank clears it):`,'');
+  if(g===null)return;
+  await flushSaves();
+  const r=await api('/api/set_genre_bulk',{paths:[...SELECTED],genre:g.trim()});
+  if(r.error){toast(r.error);return;}
+  applyState(r);buildFilters();render();toast(`Set genre on ${r.changed||0} track(s) · ↩ to undo`);}
 
 /* selection (shift-range supported), no full re-render so cover art doesn't flicker */
 function rowCheck(e,di,path){
