@@ -77,7 +77,8 @@
   aside h3{margin:14px 0 6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
   aside h3:first-child{margin-top:0}
   .sbsec h3{cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none}
-  .sbsec h3::before{content:'▾';font-size:9px;color:var(--muted)}
+  .sbsec h3::before{content:'▾';font-size:13px;line-height:1;color:var(--muted);width:14px;text-align:center}
+  .sbsec h3:hover::before{color:var(--accent)}
   .sbsec.collapsed h3::before{content:'▸'}
   .sbsec.collapsed .sbbody{display:none}
   .frow{display:flex;align-items:center;justify-content:space-between;gap:6px}
@@ -183,7 +184,18 @@
   .playerbar .np .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
   .playerbar .np .a{color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #player{display:none}
-  .pbbtn{background:var(--panel2);border:1px solid var(--line2);border-radius:50%;width:32px;height:32px;color:var(--accent);cursor:pointer;font-size:12px;flex:none}
+  .pbbtn{background:var(--panel2);border:1px solid var(--line2);border-radius:50%;width:32px;height:32px;color:var(--accent);cursor:pointer;font-size:12px;flex:none;display:flex;align-items:center;justify-content:center;padding:0}
+  .usbprog{display:inline-flex;align-items:center;gap:6px;font-size:10px}
+  .usbprogbar{width:90px;height:7px;background:var(--inset);border:1px solid var(--line2);border-radius:4px;overflow:hidden}
+  .usbprogbar i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+  th{position:relative}
+  .colres{position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;user-select:none}
+  .colres:hover{background:var(--accent);opacity:.5}
+  .searchwrap{position:relative;display:inline-block}
+  .searchsug{position:absolute;top:calc(100% + 2px);left:0;z-index:60;background:var(--panel2);border:1px solid var(--line2);border-radius:3px;max-height:260px;overflow:auto;min-width:230px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  .sgi{padding:5px 9px;font-size:11px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;white-space:nowrap}
+  .sgi:hover,.sgi.sel{background:var(--inset)}
+  .sghint{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em}
   .pbbtn:hover{border-color:var(--accent)}
   .pbtime{font-size:11px;color:var(--muted);font-family:"SF Mono",Menlo,monospace;min-width:36px;text-align:center;flex:none}
   .pbseek{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;background:var(--line2);outline:none;cursor:pointer}
@@ -201,7 +213,10 @@
     <button onclick="removeSource()" title="Remove the selected folder from the library (files stay on disk)">✕</button>
   </div>
   <button onclick="rescan()" id="rescanBtn" disabled title="Re-read all loaded folders to pick up changes">Rescan</button>
+  <button onclick="navBack()" id="navBack" disabled title="Back to the previous view (folder, search & filters)">‹</button>
+  <button onclick="navFwd()" id="navFwd" disabled title="Forward to the next view">›</button>
   <button onclick="undo()" id="undoBtn" disabled title="Undo the last change">↩ Undo</button>
+  <button onclick="redo()" id="redoBtn" disabled title="Redo">↪ Redo</button>
   <span class="spacer"></span>
   <div class="usbbox" id="usbBox" ondragover="usbOver(event)" ondragleave="document.getElementById('usbBox').classList.remove('dragover')" ondrop="usbDrop(event)">
     <label>USB</label>
@@ -212,7 +227,7 @@
   <button onclick="toggleTheme()" id="themeBtn" title="Quick switch light / dark">☀</button>
   <button onclick="openSettings()" id="settingsBtn" title="Settings (themes)">⚙</button>
   <button onclick="openHelp()" id="helpBtn" title="Help &amp; tutorial">?</button>
-  <input id="search" placeholder="Search…" oninput="render()" title="Filter by title, artist, filename, notes or tags" style="width:110px">
+  <span class="searchwrap"><input id="search" placeholder="Search…" oninput="onSearchInput()" onkeydown="searchKey(event)" onfocus="showSug()" onblur="setTimeout(hideSug,150)" autocomplete="off" title="Search every field. Combine words (all must match) and filters: genre: artist: title: key: tag: bpm: energy: rating: notes:  — numbers take ranges like bpm:120-130, bpm:>124, energy:7-9. Typos are tolerated." style="width:230px"><div id="searchSug" class="searchsug" style="display:none"></div></span>
 </header>
 
 <div class="layout">
@@ -242,8 +257,10 @@
       <label class="chk" title="Show only the tracks you've selected"><input type="checkbox" id="showSel" onchange="toggleShowSelected()"> Show selected</label>
       <label class="chk" title="Show tracks you've hidden (they jump to the top) so you can unhide them"><input type="checkbox" id="showHidden" onchange="toggleShowHidden()"> Show hidden</label>
       <span class="count" id="count">0 tracks</span>
+      <span class="usbprog" id="usbProg" title="Songs on the active USB vs. your whole library"><span class="usbprogbar"><i id="usbProgFill"></i></span><span id="usbProgTxt" class="muted"></span></span>
       <span class="spacer"></span>
       <button id="colsBtn" onclick="openColMenu(event)" title="Show or hide table columns">Columns ▾</button>
+      <button onclick="resetCols()" title="Reset all column widths back to default">Reset cols</button>
       <button onclick="addField()" title="Add your own column (e.g. Mood, Vibe, Set position)">+ Field</button>
       <button onclick="manageFields()" title="Remove a custom field">Manage fields</button>
       <button onclick="sendSelected()" title="File the selected tracks into the active USB by genre">▸ Send → USB</button>
@@ -357,9 +374,9 @@
 
 <div class="playerbar">
   <div class="np"><div class="t" id="npTitle">Nothing playing</div><div class="a" id="npArtist"></div></div>
-  <button class="pbbtn" id="pbBtn" onclick="pbToggle()" title="Play / pause">▶</button>
+  <button class="pbbtn" id="pbBtn" onclick="pbToggle()" title="Play / pause"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
   <span class="pbtime" id="pbCur">0:00</span>
-  <input type="range" class="pbseek" id="pbSeek" min="0" max="1000" value="0" step="1" oninput="pbSeek(this.value)" title="Seek">
+  <input type="range" class="pbseek" id="pbSeek" min="0" max="1000" value="0" step="1" oninput="pbSeekInput(this.value)" onchange="pbSeekCommit(this.value)" title="Seek">
   <span class="pbtime" id="pbDur">0:00</span>
   <audio id="player" preload="none"></audio>
 </div>
@@ -368,8 +385,9 @@
 
 <script>
 let TRACKS=[], FIELDS=[], USBS=[], ACTIVE_USB="";
-let SELECTED=new Set(), RATING_FILTER=0, NOW=null, CAN_UNDO=false, GMENU_OWNER=null;
+let SELECTED=new Set(), RATING_FILTER=0, NOW=null, CAN_UNDO=false, CAN_REDO=false, GMENU_OWNER=null;
 let COLS={}; try{COLS=JSON.parse(localStorage.getItem('djlib-cols')||'{}');}catch(e){COLS={};}
+let COLW={}; try{COLW=JSON.parse(localStorage.getItem('djlib-colw')||'{}');}catch(e){COLW={};}
 let KEY_MODE=localStorage.getItem('djlib-keymode')||'camelot';
 let SORT={key:'',dir:'asc'}; try{SORT=JSON.parse(localStorage.getItem('djlib-sort')||'{}');SORT.key=SORT.key||'';SORT.dir=SORT.dir||'asc';}catch(e){SORT={key:'',dir:'asc'};}
 let CURRENT_ROWS=[], LAST_IDX=null, PENDING_USB_NAME='', SOURCES=[], CURRENT_SOURCE='', SHOW_HIDDEN=false, SHOW_SELECTED=false, USBSET=new Set(), DRAG_PATHS=[], CRATES=[];
@@ -425,6 +443,7 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
   clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2400);}
 async function api(p,b){const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});return r.json();}
 function setCanUndo(v){if(v!==undefined){CAN_UNDO=!!v;document.getElementById('undoBtn').disabled=!CAN_UNDO;}}
+function setCanRedo(v){if(v!==undefined){CAN_REDO=!!v;document.getElementById('redoBtn').disabled=!CAN_REDO;}}
 
 async function init(){
   syncThemeBtn();restoreSidebar();
@@ -457,7 +476,7 @@ const TOUR=[
 let TOUR_I=0, TOUR_EL=null;
 function startTour(){TOUR_I=0;tourStep();}
 function tourStep(){
-  if(TOUR_EL){TOUR_EL.classList.remove('tour-highlight');TOUR_EL=null;}
+  document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));TOUR_EL=null;
   const s=TOUR[TOUR_I]; const el=document.querySelector(s.sel);
   const tip=document.getElementById('tourTip');
   document.getElementById('tourTitle').textContent=s.title;
@@ -466,17 +485,17 @@ function tourStep(){
   document.getElementById('tourBack').style.visibility=TOUR_I===0?'hidden':'visible';
   document.getElementById('tourNext').textContent=TOUR_I===TOUR.length-1?'Done':'Next';
   tip.style.display='block';
-  if(el){el.classList.add('tour-highlight');TOUR_EL=el;
+  if(el){el.classList.add('tour-highlight');TOUR_EL=el;el.scrollIntoView({block:'nearest'});
     const r=el.getBoundingClientRect();
     let top=r.bottom+10, left=Math.min(Math.max(8,r.left), window.innerWidth-300);
     if(top+180>window.innerHeight) top=Math.max(8,r.top-190);
-    tip.style.top=top+'px'; tip.style.left=left+'px';
+    tip.style.transform=''; tip.style.top=top+'px'; tip.style.left=left+'px';
   } else { tip.style.top='80px'; tip.style.left='50%'; tip.style.transform='translateX(-50%)'; }
 }
 function tourGo(d){TOUR_I+=d; if(TOUR_I>=TOUR.length){endTour();return;} if(TOUR_I<0)TOUR_I=0; tourStep();}
 function endTour(){localStorage.setItem('onda-toured','1');
-  if(TOUR_EL){TOUR_EL.classList.remove('tour-highlight');TOUR_EL=null;}
-  document.getElementById('tourTip').style.display='none';}
+  document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));TOUR_EL=null;
+  const tip=document.getElementById('tourTip');tip.style.display='none';tip.style.transform='';}
 async function setUsbModeVal(m){await api('/api/set_usb_mode',{mode:m});
   toast(m==='copy'?'USB mode: Copy — your originals stay put':'USB mode: Move — files relocate into the USB');}
 async function reveal(i){await api('/api/reveal',{path:TRACKS[i].path});}
@@ -534,7 +553,7 @@ function applyState(s){
   if(s.auto_file!==undefined)document.getElementById('setAutoFile').checked=s.auto_file;
   if(s.usb_mode)document.getElementById('setUsbMode').value=s.usb_mode;
   document.getElementById('setKeyMode').value=KEY_MODE;
-  setCanUndo(s.can_undo);renderUsbBar();renderSrcBar();
+  setCanUndo(s.can_undo);setCanRedo(s.can_redo);renderUsbBar();renderSrcBar();
   document.getElementById('rescanBtn').disabled=SOURCES.length===0;
 }
 function renderSrcBar(){
@@ -556,6 +575,8 @@ async function setAutoFileVal(on){await api('/api/set_auto_file',{on});
   toast(on?'Auto-file ON — a genre move happens instantly':'Auto-file OFF — use Send → USB');}
 async function undo(){if(!CAN_UNDO)return;const r=await api('/api/undo');
   if(r.error){toast(r.error);return;}applyState(r);SELECTED.clear();buildFilters();render();toast('Undone: '+(r.undone||'last action'));}
+async function redo(){if(!CAN_REDO)return;const r=await api('/api/redo');
+  if(r.error){toast(r.error);return;}applyState(r);SELECTED.clear();buildFilters();render();toast('Redone: '+(r.redone||'last action'));}
 
 /* USB */
 function renderUsbBar(){const sel=document.getElementById('usbSel');
@@ -573,15 +594,15 @@ async function usbChoose(kind){
   const r=await api('/api/add_usb',{name:PENDING_USB_NAME, use_existing: kind==='existing'});
   if(r.cancelled){toast('No folder chosen — USB not created');return;}
   if(r.error){toast(r.error);return;}
-  USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);renderUsbBar();
+  USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);setCanRedo(r.can_redo);renderUsbBar();
   toast('USB ready: '+PENDING_USB_NAME);
 }
 async function setActiveUsb(){const id=document.getElementById('usbSel').value;
-  const r=await api('/api/set_active_usb',{id});USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);renderUsbBar();buildFilters();render();toast(id?'Active USB set':'No active USB');}
+  const r=await api('/api/set_active_usb',{id});USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);setCanRedo(r.can_redo);renderUsbBar();buildFilters();render();toast(id?'Active USB set':'No active USB');}
 async function removeUsb(){if(!ACTIVE_USB){toast('No USB selected');return;}
   const u=USBS.find(x=>x.id===ACTIVE_USB);
   if(!confirm('Forget USB "'+(u?u.name:'')+'"?\n(The folder and its files stay on disk.)'))return;
-  const r=await api('/api/remove_usb',{id:ACTIVE_USB});USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);renderUsbBar();toast('USB forgotten');}
+  const r=await api('/api/remove_usb',{id:ACTIVE_USB});USBS=r.usbs;ACTIVE_USB=r.active_usb;setCanUndo(r.can_undo);setCanRedo(r.can_redo);renderUsbBar();toast('USB forgotten');}
 
 /* crates + drag-and-drop */
 function saveCrateCollapsed(){localStorage.setItem('onda-crateco',JSON.stringify([...CRATE_COLLAPSED]));}
@@ -614,18 +635,17 @@ async function newCrate(){
   const r=await api('/api/add_crate',{name:name.trim(),use_existing:useExisting});
   if(r.cancelled){toast('No folder chosen');return;}
   if(r.error){toast(r.error);return;}
-  CRATES=r.crates||CRATES;renderCrates();toast('Crate ready');
+  CRATES=r.crates||CRATES;renderCrates();setCanUndo(r.can_undo);setCanRedo(r.can_redo);toast('Crate ready');
 }
 async function addSub(parent){
   const name=prompt('Name the sub-folder:'); if(!name)return;
   const r=await api('/api/add_subcrate',{parent,name:name.trim()});
   if(r.error){toast(r.error);return;}
-  CRATES=r.crates||CRATES;renderCrates();
+  CRATES=r.crates||CRATES;renderCrates();setCanUndo(r.can_undo);setCanRedo(r.can_redo);
 }
 async function removeCrate(id){
   if(!confirm('Remove this crate from the sidebar?\n(The folder and its files stay on disk.)'))return;
-  const r=await api('/api/remove_crate',{id});CRATES=r.crates||CRATES;renderCrates();toast('Crate removed');
-}
+  const r=await api('/api/remove_crate',{id});CRATES=r.crates||CRATES;renderCrates();setCanUndo(r.can_undo);setCanRedo(r.can_redo);toast('Crate removed');}
 function rowDrag(e,path){
   DRAG_PATHS=(SELECTED.has(path)&&SELECTED.size>1)?[...SELECTED]:[path];
   e.dataTransfer.effectAllowed='copyMove';
@@ -636,6 +656,9 @@ function _isDropTarget(t){return t&&t.closest&&(t.closest('.crate')||t.closest('
 document.addEventListener('dragover',e=>{if(DRAG_PATHS.length&&!_isDropTarget(e.target)){e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='none';}});
 document.addEventListener('drop',e=>{if(DRAG_PATHS.length&&!_isDropTarget(e.target))e.preventDefault();});
 document.addEventListener('dragend',()=>{DRAG_PATHS=[];});
+/* let you select text in title/artist/etc.: only drag the row when grabbing a non-input area */
+document.addEventListener('mousedown',e=>{const tr=e.target.closest&&e.target.closest('#tableWrap tbody tr');
+  if(!tr)return; tr.draggable=!e.target.closest('input,select,textarea,button,.stars,.keychip,.pill');},true);
 function crateOver(e,el){e.preventDefault();el.classList.add('dragover');e.dataTransfer.dropEffect='copy';}
 async function crateDropEv(e,el){e.preventDefault();el.classList.remove('dragover');
   const dest=el.getAttribute('data-path'); if(!DRAG_PATHS.length)return;
@@ -691,12 +714,117 @@ function clearFilters(){document.querySelectorAll('aside input[type=checkbox]').
   ['eMin','eMax','bMin','bMax'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('search').value='';RATING_FILTER=0;renderRatingFilter();render();}
 function num(id){const v=document.getElementById(id).value;return v===''?null:parseFloat(v);}
+/* ---- smart search ---------------------------------------------------- */
+const _FIELD_ALIASES={g:'genre',genre:'genre',a:'artist',artist:'artist',title:'title',ti:'title',
+  k:'key',key:'key',tag:'tags',tags:'tags',t:'tags',bpm:'bpm',tempo:'bpm',e:'energy',energy:'energy',
+  r:'rating',rating:'rating',star:'rating',stars:'rating',note:'notes',notes:'notes',
+  name:'filename',file:'filename',filename:'filename'};
+const _NUMFIELDS=new Set(['bpm','energy','rating']);
+let _qCache={raw:null,parsed:null};
+function _lev(a,b){const m=a.length,n=b.length;if(!m)return n;if(!n)return m;
+  let p=Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){let prev=p[0];p[0]=i;
+    for(let j=1;j<=n;j++){const tmp=p[j];
+      p[j]=Math.min(p[j]+1,p[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));prev=tmp;}}
+  return p[n];}
+function _numSpec(v){v=(v||'').trim();let m;
+  if(m=v.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/))return {t:'range',a:+m[1],b:+m[2]};
+  if(m=v.match(/^(>=|<=|>|<|=)\s*(\d+(?:\.\d+)?)$/))return {t:'op',op:m[1],n:+m[2]};
+  if(m=v.match(/^(\d+(?:\.\d+)?)$/))return {t:'eq',n:+m[1]};
+  return null;}
+function _parseQuery(raw){
+  const fields=[],terms=[];
+  const re=/(\w+):"([^"]*)"|(\w+):(\S+)|"([^"]*)"|(\S+)/g;let m;
+  while((m=re.exec(raw))){
+    const fkey=(m[1]||m[3]||'').toLowerCase();
+    const fval=(m[2]!==undefined?m[2]:m[4]);
+    if(fkey&&_FIELD_ALIASES[fkey]){
+      const f=_FIELD_ALIASES[fkey];
+      if(_NUMFIELDS.has(f))fields.push({f,spec:_numSpec(fval)});
+      else fields.push({f,val:fval});
+    } else {
+      const term=(m[5]!==undefined?m[5]:m[6]);
+      if(term)terms.push(term);
+    }
+  }
+  return {fields,terms};
+}
+function parsedQuery(){const raw=document.getElementById('search').value.trim();
+  if(_qCache.raw!==raw)_qCache={raw,parsed:raw?_parseQuery(raw):null};return _qCache.parsed;}
+function _ftext(t,f){switch(f){
+  case 'genre':return t.genre||''; case 'artist':return t.artist||''; case 'title':return t.title||'';
+  case 'key':return (t.key||'')+' '+keyId(t.key); case 'tags':return (t.tags||[]).join(' ');
+  case 'notes':return t.notes||''; case 'filename':return t.filename||'';} return '';}
+function _fnum(t,f){if(f==='bpm')return parseFloat(t.bpm);if(f==='energy')return t.energy;if(f==='rating')return t.rating;return NaN;}
+function _matchNum(val,spec){if(!spec)return true;if(val===null||val===undefined||isNaN(val))return false;
+  if(spec.t==='range')return val>=spec.a&&val<=spec.b;
+  if(spec.t==='eq')return Math.round(val)===Math.round(spec.n);
+  const n=spec.n;switch(spec.op){case '>':return val>n;case '<':return val<n;case '>=':return val>=n;case '<=':return val<=n;}return Math.round(val)===Math.round(n);}
+function _textMatch(hay,term){hay=(hay||'').toLowerCase();term=(term||'').toLowerCase();if(!term)return true;
+  if(hay.includes(term))return true;
+  if(term.length>=4){for(const w of hay.split(/[^a-z0-9]+/)){if(w.length>=4&&Math.abs(w.length-term.length)<=1&&_lev(w,term)<=1)return true;}}
+  return false;}
+function matchSearch(t){
+  const pq=parsedQuery();if(!pq)return true;
+  for(const fl of pq.fields){
+    if(_NUMFIELDS.has(fl.f)){if(!_matchNum(_fnum(t,fl.f),fl.spec))return false;}
+    else{if(!_textMatch(_ftext(t,fl.f),fl.val))return false;}
+  }
+  if(pq.terms.length){
+    const hay=`${t.title} ${t.artist} ${t.genre} ${(t.tags||[]).join(' ')} ${t.key} ${keyId(t.key)} ${t.bpm} ${t.notes} ${t.filename}`;
+    for(const term of pq.terms){if(!_textMatch(hay,term))return false;}
+  }
+  return true;
+}
+/* ---- search autocomplete --------------------------------------------- */
+function onSearchInput(){_qCache.raw=null;render();showSug();}
+function _libValues(field){const s=new Set();for(const t of TRACKS){
+  if(field==='tags'){(t.tags||[]).forEach(x=>x&&s.add(String(x)));}
+  else if(field==='key'){if(t.key)s.add(String(t.key));}
+  else{const v=t[field];if(v!==undefined&&v!==null&&v!=='')s.add(String(v));}}
+  return [...s].sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:1);}
+function _quote(v){return /\s/.test(v)?'"'+v+'"':v;}
+function _lastTok(s){const m=s.match(/(\S*)$/);return m?m[1]:'';}
+function showSug(){
+  const inp=document.getElementById('search'),box=document.getElementById('searchSug');
+  const tok=_lastTok(inp.value);let sug=[];
+  const fieldNames=['genre','artist','title','key','tag','bpm','energy','rating','notes'];
+  const ci=tok.indexOf(':');
+  if(ci>0){
+    const fk=tok.slice(0,ci).toLowerCase(),part=tok.slice(ci+1).replace(/^"|"$/g,'').toLowerCase();
+    const f=_FIELD_ALIASES[fk];
+    if(f&&!_NUMFIELDS.has(f)){
+      sug=_libValues(f).filter(v=>v.toLowerCase().includes(part)).slice(0,9)
+        .map(v=>({label:fk+':'+v,val:fk+':'+_quote(v),hint:f}));
+    }
+  } else if(tok){
+    const tl=tok.toLowerCase();
+    fieldNames.filter(f=>f.startsWith(tl)).forEach(f=>sug.push({label:f+':',val:f+':',hint:'filter'}));
+    ['genre','artist','tags'].forEach(vf=>_libValues(vf).filter(v=>v.toLowerCase().includes(tl)).slice(0,3)
+      .forEach(v=>sug.push({label:v,val:_quote(v),hint:vf==='tags'?'tag':vf})));
+    sug=sug.slice(0,9);
+  }
+  if(!sug.length){hideSug();return;}
+  box.innerHTML=sug.map(s=>`<div class="sgi" data-val="${escAttr(s.val)}" onmousedown="event.preventDefault();applySug(this.getAttribute('data-val'))"><span>${esc(s.label)}</span><span class="sghint">${esc(s.hint||'')}</span></div>`).join('');
+  box.style.display='block';}
+function hideSug(){const b=document.getElementById('searchSug');if(b)b.style.display='none';}
+function applySug(val){const inp=document.getElementById('search');
+  inp.value=inp.value.replace(/(\S*)$/,val)+' ';_qCache.raw=null;hideSug();inp.focus();render();}
+function searchKey(e){
+  const box=document.getElementById('searchSug');if(box.style.display==='none')return;
+  const items=[...box.querySelectorAll('.sgi')];if(!items.length)return;
+  let i=items.findIndex(x=>x.classList.contains('sel'));
+  if(e.key==='ArrowDown'){e.preventDefault();i=(i+1)%items.length;}
+  else if(e.key==='ArrowUp'){e.preventDefault();i=(i-1+items.length)%items.length;}
+  else if(e.key==='Enter'){if(i>=0){e.preventDefault();applySug(items[i].getAttribute('data-val'));}return;}
+  else if(e.key==='Escape'){hideSug();return;}
+  else return;
+  items.forEach(x=>x.classList.remove('sel'));if(i>=0)items[i].classList.add('sel');}
 function passes(t){
   if(t.hidden && !SHOW_HIDDEN) return false;
   if(SHOW_SELECTED && !SELECTED.has(t.path)) return false;
   if(CURRENT_SOURCE && t.source!==CURRENT_SOURCE) return false;
-  const q=document.getElementById('search').value.trim().toLowerCase();
-  if(q){const hay=`${t.title} ${t.artist} ${t.filename} ${t.notes} ${(t.tags||[]).join(' ')}`.toLowerCase();if(!hay.includes(q))return false;}
+  if(!matchSearch(t))return false;
   const gs=checkedVals('fg');if(gs.length&&!gs.includes(t.genre))return false;
   const ks=checkedVals('fk');if(ks.length&&!ks.includes(keyId(t.key)))return false;
   const ts=checkedVals('ft');if(ts.length&&!ts.some(x=>(t.tags||[]).includes(x)))return false;
@@ -779,14 +907,18 @@ function render(){
   document.getElementById('count').textContent=`${rows.length} / ${TRACKS.length} tracks · ${SELECTED.size} sel`;
   if(TRACKS.length===0){document.getElementById('tableWrap').innerHTML='<div class="empty"><div style="font-size:15px;color:var(--text);margin-bottom:6px">No music loaded yet</div>Click <b>Add Folder…</b> at the top-left to pick a music folder.<br>Your files aren’t changed — ONDA just reads them so you can tag, preview, and sort.</div>';return;}
   const cols=visibleCols();
+  const colg=`<colgroup>${cols.map(c=>`<col style="${COLW[c.key]?`width:${COLW[c.key]}px`:''}">`).join('')}</colgroup>`;
   const head=cols.map(c=>{
+    const handle=`<span class="colres" title="Drag to resize" onmousedown="startColResize(event,'${escAttr(c.key)}')" onclick="event.stopPropagation()"></span>`;
     if(c.sortKey){const act=SORT.key===c.sortKey;const ar=act?(SORT.dir==='asc'?' ▲':' ▼'):'';
-      return `<th class="sortable${act?' sorted':''}" onclick="setSort('${c.sortKey}')">${c.th}${ar}</th>`;}
-    return `<th>${c.th||''}</th>`;}).join('');
+      return `<th class="sortable${act?' sorted':''}" onclick="setSort('${c.sortKey}')">${c.th}${ar}${handle}</th>`;}
+    return `<th>${c.th||''}${handle}</th>`;}).join('');
   const body=rows.map((t,di)=>{const i=TRACKS.indexOf(t);
     return `<tr data-path="${esc(t.path)}" draggable="true" ondragstart="rowDrag(event,'${escAttr(t.path)}')" class="${NOW===t.path?'playing':''}${t.hidden?' hiddenrow':''}">${cols.map(c=>c.cell(t,i,di)).join('')}</tr>`;}).join('');
-  document.getElementById('tableWrap').innerHTML=`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  document.getElementById('tableWrap').innerHTML=`<table>${colg}<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   document.getElementById('selAll').checked=rows.length>0&&rows.every(t=>SELECTED.has(t.path));
+  updateUsbProgress();
+  recordView();
 }
 /* lightweight updates that DON'T rebuild the table (avoids cover re-load flicker) */
 function updatePlayingUI(){
@@ -804,7 +936,73 @@ function refreshChecks(){
   updateCount();
 }
 function updateCount(){const shown=TRACKS.filter(passes).length;
-  document.getElementById('count').textContent=`${shown} / ${TRACKS.length} tracks · ${SELECTED.size} sel`;}
+  document.getElementById('count').textContent=`${shown} / ${TRACKS.length} tracks · ${SELECTED.size} sel`;
+  updateUsbProgress();}
+/* ---- USB progress bar: how much of the library is on the active USB ---- */
+function updateUsbProgress(){
+  const fill=document.getElementById('usbProgFill'),txt=document.getElementById('usbProgTxt');
+  if(!fill||!txt)return;
+  const total=TRACKS.length;
+  if(!ACTIVE_USB||!total){fill.style.width='0';txt.textContent=ACTIVE_USB?'0 on USB':'no active USB';return;}
+  const on=TRACKS.filter(t=>t.usb===ACTIVE_USB).length;
+  const u=USBS.find(x=>x.id===ACTIVE_USB);
+  fill.style.width=(on/total*100)+'%';
+  txt.textContent=`${on}/${total} on ${u?u.name:'USB'}`;}
+/* ---- resizable columns ---- */
+let _colResize=null;
+function startColResize(e,key){e.preventDefault();e.stopPropagation();
+  const cols=visibleCols();const idx=cols.findIndex(c=>c.key===key);
+  const colEl=document.querySelectorAll('#tableWrap colgroup col')[idx];
+  const th=e.target.closest('th'); if(!colEl||!th)return;
+  _colResize={key,colEl,startX:e.clientX,startW:th.getBoundingClientRect().width};
+  document.addEventListener('mousemove',_onColResize);
+  document.addEventListener('mouseup',_endColResize);}
+function _onColResize(e){if(!_colResize)return;
+  const w=Math.max(36,Math.round(_colResize.startW+(e.clientX-_colResize.startX)));
+  _colResize.colEl.style.width=w+'px';COLW[_colResize.key]=w;}
+function _endColResize(){if(!_colResize)return;
+  localStorage.setItem('djlib-colw',JSON.stringify(COLW));_colResize=null;
+  document.removeEventListener('mousemove',_onColResize);document.removeEventListener('mouseup',_endColResize);}
+function resetCols(){COLW={};localStorage.removeItem('djlib-colw');render();toast('Column widths reset');}
+/* ---- view history (Back / Forward) ---- */
+let VIEW_HIST=[], VIEW_POS=-1, VIEW_RESTORING=false, _viewTimer=null;
+function _gv(id){const el=document.getElementById(id);return el?el.value:'';}
+function snapshotView(){return JSON.stringify({
+  src:CURRENT_SOURCE, q:_gv('search'), rt:RATING_FILTER, sh:SHOW_HIDDEN, ss:SHOW_SELECTED,
+  so:SORT, au:ACTIVE_USB, fg:checkedVals('fg'), fk:checkedVals('fk'), ft:checkedVals('ft'),
+  eMin:_gv('eMin'), eMax:_gv('eMax'), bMin:_gv('bMin'), bMax:_gv('bMax')});}
+function recordView(){
+  if(VIEW_RESTORING)return;
+  clearTimeout(_viewTimer);
+  _viewTimer=setTimeout(()=>{
+    const s=snapshotView();
+    if(VIEW_POS>=0 && VIEW_HIST[VIEW_POS]===s)return;
+    VIEW_HIST=VIEW_HIST.slice(0,VIEW_POS+1);
+    VIEW_HIST.push(s); if(VIEW_HIST.length>60)VIEW_HIST.shift();
+    VIEW_POS=VIEW_HIST.length-1; updateNavButtons();
+  },450);}
+function updateNavButtons(){
+  const b=document.getElementById('navBack'),f=document.getElementById('navFwd');
+  if(b)b.disabled=VIEW_POS<=0; if(f)f.disabled=VIEW_POS>=VIEW_HIST.length-1;}
+async function restoreView(s){
+  const v=JSON.parse(s); VIEW_RESTORING=true;
+  if(v.au!==ACTIVE_USB){try{const r=await api('/api/set_active_usb',{id:v.au});USBS=r.usbs;ACTIVE_USB=r.active_usb;renderUsbBar();}catch(_){}}
+  CURRENT_SOURCE=v.src; RATING_FILTER=v.rt; SHOW_HIDDEN=v.sh; SHOW_SELECTED=v.ss; SORT=v.so;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
+  set('search',v.q); _qCache.raw=null;
+  set('eMin',v.eMin); set('eMax',v.eMax); set('bMin',v.bMin); set('bMax',v.bMax);
+  const sh=document.getElementById('showHidden'); if(sh)sh.checked=v.sh;
+  const ssx=document.getElementById('showSel'); if(ssx)ssx.checked=v.ss;
+  const srcSel=document.getElementById('srcSel'); if(srcSel)srcSel.value=v.src;
+  buildFilters();
+  document.querySelectorAll('.fg').forEach(c=>c.checked=v.fg.includes(c.value));
+  document.querySelectorAll('.fk').forEach(c=>c.checked=v.fk.includes(c.value));
+  document.querySelectorAll('.ft').forEach(c=>c.checked=v.ft.includes(c.value));
+  renderRatingFilter();
+  render();
+  VIEW_RESTORING=false; updateNavButtons();}
+function navBack(){if(VIEW_POS>0){VIEW_POS--;restoreView(VIEW_HIST[VIEW_POS]);}}
+function navFwd(){if(VIEW_POS<VIEW_HIST.length-1){VIEW_POS++;restoreView(VIEW_HIST[VIEW_POS]);}}
 
 /* columns menu */
 function openColMenu(ev){ev.stopPropagation();const m=document.getElementById('colMenu');
@@ -822,7 +1020,7 @@ function openGenreMenu(ev,i){ev.stopPropagation();const menu=document.getElement
     `<span class="gdel" title="Delete this genre everywhere" onclick="deleteGenre(event,'${escAttr(g)}')">✕</span></div>`).join('')
     :'<div class="none">No genres yet — type one in.</div>';
   const r=ev.target.getBoundingClientRect();menu.style.left=Math.max(8,r.left-150)+'px';menu.style.top=(r.bottom+4)+'px';menu.style.display='block';}
-function pickGenre(i,g){document.getElementById('genreMenu').style.display='none';GMENU_OWNER=null;setGenre(i,g);}
+function pickGenre(i,g){document.getElementById('genreMenu').style.display='none';GMENU_OWNER=null;setGenre(i,g);render();}
 async function deleteGenre(ev,g){ev.stopPropagation();document.getElementById('genreMenu').style.display='none';GMENU_OWNER=null;
   if(!confirm('Delete genre "'+g+'" from ALL tracks?\nTheir genre will be cleared (files already in a USB stay where they are).'))return;
   const r=await api('/api/delete_genre',{genre:g});if(r.error){toast(r.error);return;}
@@ -837,8 +1035,24 @@ function setGenre(i,v){TRACKS[i].genre=v;buildFilters();doSave(TRACKS[i]);}
 function setRating(i,s){TRACKS[i].rating=(TRACKS[i].rating===s)?0:s;queueSave(TRACKS[i]);render();}
 function setTags(i,v){TRACKS[i].tags=v.split(',').map(x=>x.trim()).filter(Boolean);queueSave(TRACKS[i]);buildFilters();render();}
 function setCustom(i,name,v){TRACKS[i].custom=TRACKS[i].custom||{};TRACKS[i].custom[name]=v;queueSave(TRACKS[i]);}
-function queueSave(t){clearTimeout(saveTimers[t.path]);saveTimers[t.path]=setTimeout(()=>doSave(t),500);}
-async function doSave(t,renameTo){
+/* pending-save tracking so a USB send always waits for in-flight tag edits
+   (fixes: genre named then sent lands in the OLD genre / loses its USB badge) */
+const PENDING_TRACKS=new Map();   // path -> track waiting on a debounce timer
+const INFLIGHT=new Set();         // currently-running save promises
+function queueSave(t){PENDING_TRACKS.set(t.path,t);clearTimeout(saveTimers[t.path]);
+  saveTimers[t.path]=setTimeout(()=>{PENDING_TRACKS.delete(t.path);doSave(t);},500);}
+async function flushSaves(){
+  const ps=[];
+  for(const [p,t] of [...PENDING_TRACKS]){clearTimeout(saveTimers[p]);PENDING_TRACKS.delete(p);ps.push(doSave(t));}
+  await Promise.all(ps);
+  await Promise.all([...INFLIGHT]);   // settle anything already running
+}
+function doSave(t,renameTo){
+  const job=_doSave(t,renameTo);
+  INFLIGHT.add(job); job.finally(()=>INFLIGHT.delete(job));
+  return job;
+}
+async function _doSave(t,renameTo){
   const oldPath=t.path;const payload=Object.assign({},t);if(renameTo)payload.rename_to=renameTo;
   const r=await api('/api/save_track',payload);if(r.error){toast(r.error);return;}
   if(r.track){Object.assign(t,r.track);
@@ -846,19 +1060,21 @@ async function doSave(t,renameTo){
     if(NOW===oldPath)NOW=t.path;
     if(t.path!==oldPath){render(); if(renameTo)toast('Renamed file → '+t.filename);}
     if(r.moved){toast(`Moved → ${r.moved.usb} / ${r.moved.genre}`);buildFilters();render();}}
-  setCanUndo(r.can_undo);
+  setCanUndo(r.can_undo);setCanRedo(r.can_redo);
   if(r.no_usb)toast('Tagged. Pick an Active USB to auto-file by genre.');
   if(r.ok===false)toast('Saved to library (couldn’t embed: '+r.embed+')');
+  return r;
 }
 
 /* send to USB */
 async function sendToUsb(paths){
   if(!paths.length){toast('Nothing to send');return;}
   if(!ACTIVE_USB){toast('Pick or create an Active USB first');return;}
+  await flushSaves();   // make sure any just-typed genre is saved BEFORE we file to USB
   const r=await api('/api/send_to_usb',{paths});if(r.error){toast(r.error);return;}
   (r.results||[]).forEach(res=>{const t=TRACKS.find(x=>x.path===res.old);
     if(t){const old=res.old;Object.assign(t,res.track);if(SELECTED.has(old)){SELECTED.delete(old);SELECTED.add(t.path);}if(NOW===old)NOW=t.path;}});
-  setCanUndo(r.can_undo);buildFilters();render();
+  setCanUndo(r.can_undo);setCanRedo(r.can_redo);buildFilters();render();
   const moved=(r.results||[]).filter(x=>x.moved).length, skip=(r.skipped||[]).length;
   toast(`Sent ${moved} to ${r.usb}`+(skip?` · ${skip} skipped (set a genre first)`:''));}
 function sendOne(i){sendToUsb([TRACKS[i].path]);}
@@ -885,10 +1101,10 @@ async function exportSelected(){if(SELECTED.size===0){toast('Select some tracks 
 
 /* custom fields */
 async function addField(){const name=prompt('New field name (e.g. Mood, Vibe, Set position):');if(!name)return;
-  const r=await api('/api/add_field',{name:name.trim(),type:'text'});FIELDS=r.fields||FIELDS;setCanUndo(r.can_undo);render();toast('Field added: '+name);}
+  const r=await api('/api/add_field',{name:name.trim(),type:'text'});FIELDS=r.fields||FIELDS;setCanUndo(r.can_undo);setCanRedo(r.can_redo);render();toast('Field added: '+name);}
 async function manageFields(){if(FIELDS.length===0){toast('No custom fields yet');return;}
   const name=prompt('Type a field name to REMOVE:\n'+FIELDS.map(f=>'• '+f.name).join('\n'));if(!name)return;
-  const r=await api('/api/remove_field',{name:name.trim()});FIELDS=r.fields||FIELDS;setCanUndo(r.can_undo);render();toast('Removed: '+name);}
+  const r=await api('/api/remove_field',{name:name.trim()});FIELDS=r.fields||FIELDS;setCanUndo(r.can_undo);setCanRedo(r.can_redo);render();toast('Removed: '+name);}
 
 /* player — uses updatePlayingUI (not render) so covers don't reload */
 function playTrack(i){
@@ -902,20 +1118,39 @@ function playTrack(i){
   document.getElementById('npArtist').textContent=t.artist||'';
   updatePlayingUI();
 }
+const PLAY_SVG='<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const PAUSE_SVG='<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+let SEEKING=false;
 function pbFmt(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function pbToggle(){if(!player.src)return;player.paused?player.play():player.pause();}
-function pbSeek(v){if(player.duration)player.currentTime=(v/1000)*player.duration;}
+function pbSeekInput(v){SEEKING=true;if(player.duration){const t=(v/1000)*player.duration;
+  document.getElementById('pbCur').textContent=pbFmt(t);
+  document.getElementById('pbSeek').style.background=`linear-gradient(to right,var(--accent) ${v/10}%,var(--line2) ${v/10}%)`;}}
+function pbSeekCommit(v){if(player.duration)player.currentTime=(v/1000)*player.duration;SEEKING=false;}
 function pbUpdate(){const d=player.duration||0,c=player.currentTime||0,p=d?c/d*100:0;
   document.getElementById('pbCur').textContent=pbFmt(c);
   document.getElementById('pbDur').textContent=pbFmt(d);
+  document.getElementById('pbBtn').innerHTML=(player.src&&!player.paused)?PAUSE_SVG:PLAY_SVG;
+  if(SEEKING)return;                                  // don't fight the user while scrubbing
   const s=document.getElementById('pbSeek');s.value=d?Math.round(c/d*1000):0;
-  s.style.background=`linear-gradient(to right,var(--accent) ${p}%,var(--line2) ${p}%)`;
-  document.getElementById('pbBtn').textContent=(player.src&&!player.paused)?'❚❚':'▶';}
+  s.style.background=`linear-gradient(to right,var(--accent) ${p}%,var(--line2) ${p}%)`;}
 player.addEventListener('timeupdate',pbUpdate);
 player.addEventListener('loadedmetadata',pbUpdate);
+player.addEventListener('durationchange',pbUpdate);
 player.addEventListener('play',()=>{pbUpdate();updatePlayingUI();});
 player.addEventListener('pause',()=>{pbUpdate();updatePlayingUI();});
 player.addEventListener('ended',()=>{NOW=null;pbUpdate();updatePlayingUI();});
+/* spacebar = play/pause when ONDA is focused and you're not typing in a field */
+document.addEventListener('keydown',e=>{
+  if(e.code!=='Space'&&e.key!==' ')return;
+  const t=e.target;
+  if(t&&(t.matches&&t.matches('input,select,textarea,button')||t.isContentEditable))return;
+  // don't hijack space while a modal/overlay is open
+  for(const id of ['welcome','settings','help','genreClean','usbModal']){
+    const m=document.getElementById(id); if(m&&m.style.display!=='none'&&m.offsetParent!==null)return;}
+  if(!player.src)return;
+  e.preventDefault(); pbToggle();
+});
 
 /* utils */
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}

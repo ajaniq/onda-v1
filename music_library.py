@@ -38,6 +38,7 @@ LOSSLESS_EXTS = (".flac", ".wav", ".aif", ".aiff", ".alac")
 DJLIB_MARKER = "DJLIB|"
 LIB_LOCK = threading.Lock()
 UNDO = []
+REDO = []
 UNDO_MAX = 40
 
 def default_library():
@@ -131,11 +132,24 @@ def _lev(a, b):
         prev = cur
     return prev[len(b)]
 
-def push_undo(snapshot, moves, touched, label, copies=None):
-    UNDO.append({"lib": snapshot, "moves": moves, "touched": touched,
-                 "label": label, "copies": copies or []})
+def push_undo(snapshot, moves, touched, label, copies=None, after=None, dirs=None):
+    # moves: [[new, old]...]  copies: [[src, dst]...]  dirs: [created dirs]
+    UNDO.append({"before": snapshot, "after": copy.deepcopy(after) if after is not None else None,
+                 "moves": moves or [], "copies": copies or [], "touched": touched or [],
+                 "dirs": dirs or [], "label": label})
+    REDO.clear()
     while len(UNDO) > UNDO_MAX:
         UNDO.pop(0)
+
+def _norm_copies(copies):
+    # accept legacy [dst] or new [src,dst]; return [src,dst] (src may be None)
+    out = []
+    for c in (copies or []):
+        if isinstance(c, (list, tuple)):
+            out.append([c[0], c[1]] if len(c) > 1 else [None, c[0]])
+        else:
+            out.append([None, c])
+    return out
 
 def _require_mutagen():
     try:
@@ -395,7 +409,7 @@ def file_into_usb(track, lib):
         return {"mode": "copy", "created": False, "new": dest, "usb": usb["name"], "genre": genre}
     shutil.copy2(cur, dest)
     track["usb"] = usb["id"]; track["usb_genre"] = genre
-    return {"mode": "copy", "created": True, "new": dest, "usb": usb["name"], "genre": genre}
+    return {"mode": "copy", "created": True, "old": cur, "new": dest, "usb": usb["name"], "genre": genre}
 
 def usb_membership(path, lib):
     """If the file physically lives inside a registered USB, return (usb_id, genre_subfolder)."""
@@ -684,7 +698,7 @@ class Handler(BaseHTTPRequestHandler):
                 "active_usb": lib["active_usb"], "auto_file": lib.get("auto_file", False),
                 "usb_mode": lib.get("usb_mode", "copy"),
                 "crate_base": lib.get("crate_base", ""), "crates": crates_payload(lib),
-                "can_undo": len(UNDO) > 0, "tracks": all_tracks(lib)}
+                "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0, "tracks": all_tracks(lib)}
 
     def _route_api_state(self):
         with LIB_LOCK:
@@ -726,7 +740,7 @@ class Handler(BaseHTTPRequestHandler):
             for p in list(lib["tracks"].keys()):
                 if lib["tracks"][p].get("source") == folder:
                     del lib["tracks"][p]
-            push_undo(snap, [], [], "remove folder")
+            push_undo(snap, [], [], "remove folder", after=lib)
             save_library(lib); payload = self._state_payload(lib)
         self._json(payload)
 
@@ -764,11 +778,11 @@ class Handler(BaseHTTPRequestHandler):
                 if moved and moved["mode"] == "move":
                     moves.append([moved["new"], moved["old"]])
                 elif moved and moved["mode"] == "copy" and moved.get("created"):
-                    copies.append(moved["new"])
+                    copies.append([moved.get("old"), moved["new"]])
             if tr["path"] != path:
                 lib["tracks"].pop(path, None)
             lib["tracks"][tr["path"]] = tr
-            push_undo(snap, moves, [path], "edit " + os.path.basename(path), copies)
+            push_undo(snap, moves, [path], "edit " + os.path.basename(path), copies, after=lib)
             save_library(lib)
             no_usb = bool(auto and (tr.get("genre") or "").strip() and not active)
         self._json({"ok": ok, "embed": msg, "track": tr, "moved": moved, "no_usb": no_usb, "can_undo": True})
@@ -787,7 +801,7 @@ class Handler(BaseHTTPRequestHandler):
                                         struct=struct_for_track(tr, lib["fields"]),
                                         artist=tr.get("artist", ""), title=tr.get("title", ""))
                     touched.append(p)
-            push_undo(snap, [], touched, "delete genre " + genre)
+            push_undo(snap, [], touched, "delete genre " + genre, after=lib)
             save_library(lib); payload = self._state_payload(lib); payload["cleared"] = len(touched)
         self._json(payload)
 
@@ -795,7 +809,7 @@ class Handler(BaseHTTPRequestHandler):
         data = self._body()
         with LIB_LOCK:
             lib = load_library(); lib["auto_file"] = bool(data.get("on")); save_library(lib); val = lib["auto_file"]
-        self._json({"auto_file": val, "can_undo": len(UNDO) > 0})
+        self._json({"auto_file": val, "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0})
 
     def _route_api_set_usb_mode(self):
         data = self._body(); mode = "move" if data.get("mode") == "move" else "copy"
@@ -876,7 +890,7 @@ class Handler(BaseHTTPRequestHandler):
                             moves.append([mv["new"], mv["old"]])
                             if tr["path"] != p:
                                 lib["tracks"].pop(p, None); lib["tracks"][tr["path"]] = tr
-            push_undo(snap, moves, touched, f"merge genres ({changed})")
+            push_undo(snap, moves, touched, f"merge genres ({changed})", after=lib)
             save_library(lib)
             payload = self._state_payload(lib); payload["merged"] = changed
         self._json(payload)
@@ -904,33 +918,42 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": str(e)}, 500); return
         with LIB_LOCK:
-            lib = load_library()
+            lib = load_library(); snap = copy.deepcopy(lib)
             if not use_existing and not lib.get("crate_base"):
                 lib["crate_base"] = os.path.dirname(path)
             if not any(c["path"] == path for c in lib.get("crates", [])):
                 lib.setdefault("crates", []).append({"id": uuid.uuid4().hex[:8], "name": name, "path": path})
+            push_undo(snap, [], [], "add crate", after=lib, dirs=([path] if not use_existing else []))
             save_library(lib)
-            payload = {"crates": crates_payload(lib), "crate_base": lib.get("crate_base", "")}
+            payload = {"crates": crates_payload(lib), "crate_base": lib.get("crate_base", ""),
+                       "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0}
         self._json(payload)
 
     def _route_api_add_subcrate(self):
         data = self._body(); parent = data.get("parent", ""); name = (data.get("name") or "").strip()
         if not parent or not os.path.isdir(parent) or not name:
             self._json({"error": "Pick a name for the sub-folder."}, 400); return
+        newdir = os.path.join(parent, safe_name(name))
+        existed = os.path.isdir(newdir)
         try:
-            os.makedirs(os.path.join(parent, safe_name(name)), exist_ok=True)
+            os.makedirs(newdir, exist_ok=True)
         except Exception as e:
             self._json({"error": str(e)}, 500); return
         with LIB_LOCK:
-            lib = load_library(); payload = {"crates": crates_payload(lib)}
+            lib = load_library()
+            push_undo(copy.deepcopy(lib), [], [], "add sub-folder", after=lib,
+                      dirs=([newdir] if not existed else []))
+            payload = {"crates": crates_payload(lib), "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0}
         self._json(payload)
 
     def _route_api_remove_crate(self):
         data = self._body(); cid = data.get("id")
         with LIB_LOCK:
-            lib = load_library()
+            lib = load_library(); snap = copy.deepcopy(lib)
             lib["crates"] = [c for c in lib.get("crates", []) if c["id"] != cid]
-            save_library(lib); payload = {"crates": crates_payload(lib)}
+            push_undo(snap, [], [], "remove crate", after=lib)
+            save_library(lib)
+            payload = {"crates": crates_payload(lib), "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0}
         self._json(payload)
 
     def _route_api_crate_drop(self):
@@ -951,11 +974,11 @@ class Handler(BaseHTTPRequestHandler):
                         if tr:
                             tr["path"] = d; tr["filename"] = os.path.basename(d); lib["tracks"][d] = tr
                     else:
-                        shutil.copy2(p, d); copies.append(d); count += 1
+                        shutil.copy2(p, d); copies.append([p, d]); count += 1
                 except Exception:
                     pass
             if moves or copies:
-                push_undo(snap, moves, [], f"drop {count} into crate", copies)
+                push_undo(snap, moves, [], f"drop {count} into crate", copies, after=lib)
             save_library(lib); payload = self._state_payload(lib); payload["dropped"] = count; payload["mode"] = mode
         self._json(payload)
 
@@ -987,12 +1010,12 @@ class Handler(BaseHTTPRequestHandler):
                 if moved and moved["mode"] == "move":
                     moves.append([moved["new"], moved["old"]])
                 elif moved and moved["mode"] == "copy" and moved.get("created"):
-                    copies.append(moved["new"])
+                    copies.append([moved.get("old"), moved["new"]])
                 results.append({"old": old, "track": tr, "moved": moved})
             if moves or copies:
-                push_undo(snap, moves, [], f"send {len(moves)+len(copies)} to {active['name']}", copies)
+                push_undo(snap, moves, [], f"send {len(moves)+len(copies)} to {active['name']}", copies, after=lib)
             save_library(lib); usb_name = active["name"]
-        self._json({"results": results, "skipped": skipped, "usb": usb_name, "can_undo": len(UNDO) > 0})
+        self._json({"results": results, "skipped": skipped, "usb": usb_name, "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0})
 
     def _route_api_add_field(self):
         data = self._body(); name = (data.get("name") or "").strip()
@@ -1002,9 +1025,9 @@ class Handler(BaseHTTPRequestHandler):
             lib = load_library(); snap = copy.deepcopy(lib)
             if not any(f["name"] == name for f in lib["fields"]):
                 lib["fields"].append({"name": name, "type": data.get("type", "text")})
-                push_undo(snap, [], [], "add field " + name)
+                push_undo(snap, [], [], "add field " + name, after=lib)
             save_library(lib); fields = lib["fields"]
-        self._json({"fields": fields, "can_undo": len(UNDO) > 0})
+        self._json({"fields": fields, "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0})
 
     def _route_api_remove_field(self):
         data = self._body(); name = data.get("name")
@@ -1014,9 +1037,9 @@ class Handler(BaseHTTPRequestHandler):
             for tr in lib["tracks"].values():
                 if "custom" in tr and name in tr["custom"]:
                     del tr["custom"][name]
-            push_undo(snap, [], [], "remove field " + str(name))
+            push_undo(snap, [], [], "remove field " + str(name), after=lib)
             save_library(lib); fields = lib["fields"]
-        self._json({"fields": fields, "can_undo": len(UNDO) > 0})
+        self._json({"fields": fields, "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0})
 
     def _route_api_add_usb(self):
         data = self._body(); name = (data.get("name") or "").strip()
@@ -1038,16 +1061,16 @@ class Handler(BaseHTTPRequestHandler):
             lib["usbs"].append(usb)
             if not lib["active_usb"]:
                 lib["active_usb"] = usb["id"]
-            push_undo(snap, [], [], "add USB " + name)
+            push_undo(snap, [], [], "add USB " + name, after=lib)
             save_library(lib)
-            payload = {"usbs": lib["usbs"], "active_usb": lib["active_usb"], "created": usb, "can_undo": len(UNDO) > 0}
+            payload = {"usbs": lib["usbs"], "active_usb": lib["active_usb"], "created": usb, "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0}
         self._json(payload)
 
     def _route_api_set_active_usb(self):
         data = self._body()
         with LIB_LOCK:
             lib = load_library(); lib["active_usb"] = data.get("id", ""); save_library(lib)
-            payload = {"usbs": lib["usbs"], "active_usb": lib["active_usb"], "can_undo": len(UNDO) > 0}
+            payload = {"usbs": lib["usbs"], "active_usb": lib["active_usb"], "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0}
         self._json(payload)
 
     def _route_api_remove_usb(self):
@@ -1057,36 +1080,74 @@ class Handler(BaseHTTPRequestHandler):
             lib["usbs"] = [u for u in lib["usbs"] if u["id"] != uid]
             if lib["active_usb"] == uid:
                 lib["active_usb"] = lib["usbs"][0]["id"] if lib["usbs"] else ""
-            push_undo(snap, [], [], "remove USB")
+            push_undo(snap, [], [], "remove USB", after=lib)
             save_library(lib)
-            payload = {"usbs": lib["usbs"], "active_usb": lib["active_usb"], "can_undo": len(UNDO) > 0}
+            payload = {"usbs": lib["usbs"], "active_usb": lib["active_usb"], "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0}
         self._json(payload)
+
+    def _reembed(self, lib, paths):
+        for p in paths:
+            tr = lib["tracks"].get(p)
+            if tr and os.path.isfile(p):
+                write_file_tags(p, genre=tr.get("genre", ""), notes=tr.get("notes", ""),
+                                struct=struct_for_track(tr, lib["fields"]),
+                                artist=tr.get("artist", ""), title=tr.get("title", ""))
 
     def _route_api_undo(self):
         with LIB_LOCK:
             if not UNDO:
                 self._json({"error": "Nothing to undo."}, 400); return
-            entry = UNDO.pop()
-            for c in entry.get("copies", []):       # undo copies = delete the copied file
+            e = UNDO.pop()
+            for src, dst in _norm_copies(e.get("copies")):   # created copies -> delete
                 try:
-                    if os.path.isfile(c):
-                        os.remove(c); _rmdir_if_empty(os.path.dirname(c), entry["lib"])
+                    if os.path.isfile(dst):
+                        os.remove(dst); _rmdir_if_empty(os.path.dirname(dst), e["before"])
                 except Exception:
                     pass
-            for src, dst in reversed(entry["moves"]):
+            for new, old in reversed(e.get("moves", [])):     # move back new -> old
                 try:
-                    if os.path.isfile(src):
-                        os.makedirs(os.path.dirname(dst), exist_ok=True); shutil.move(src, dst)
+                    if os.path.isfile(new):
+                        os.makedirs(os.path.dirname(old), exist_ok=True); shutil.move(new, old)
                 except Exception:
                     pass
-            lib = entry["lib"]
-            for p in entry["touched"]:
-                tr = lib["tracks"].get(p)
-                if tr and os.path.isfile(p):
-                    write_file_tags(p, genre=tr.get("genre", ""), notes=tr.get("notes", ""),
-                                    struct=struct_for_track(tr, lib["fields"]),
-                                    artist=tr.get("artist", ""), title=tr.get("title", ""))
-            save_library(lib); payload = self._state_payload(lib); payload["undone"] = entry["label"]
+            for d in reversed(e.get("dirs", [])):              # remove created dirs (if empty)
+                try:
+                    if os.path.isdir(d) and not os.listdir(d):
+                        os.rmdir(d)
+                except Exception:
+                    pass
+            lib = e["before"]
+            self._reembed(lib, e.get("touched", []))
+            save_library(lib); REDO.append(e)
+            payload = self._state_payload(lib); payload["undone"] = e["label"]
+        self._json(payload)
+
+    def _route_api_redo(self):
+        with LIB_LOCK:
+            if not REDO:
+                self._json({"error": "Nothing to redo."}, 400); return
+            e = REDO.pop()
+            for d in e.get("dirs", []):                        # recreate dirs
+                try:
+                    os.makedirs(d, exist_ok=True)
+                except Exception:
+                    pass
+            for new, old in e.get("moves", []):                # redo move old -> new
+                try:
+                    if os.path.isfile(old):
+                        os.makedirs(os.path.dirname(new), exist_ok=True); shutil.move(old, new)
+                except Exception:
+                    pass
+            for src, dst in _norm_copies(e.get("copies")):     # redo copy src -> dst
+                try:
+                    if src and os.path.isfile(src) and not os.path.exists(dst):
+                        os.makedirs(os.path.dirname(dst), exist_ok=True); shutil.copy2(src, dst)
+                except Exception:
+                    pass
+            lib = e["after"] if e.get("after") is not None else e["before"]
+            self._reembed(lib, e.get("touched", []))
+            save_library(lib); UNDO.append(e)
+            payload = self._state_payload(lib); payload["redone"] = e["label"]
         self._json(payload)
 
     def _route_api_export(self):
