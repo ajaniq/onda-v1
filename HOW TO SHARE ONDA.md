@@ -57,13 +57,6 @@ Send a new `ONDA-standalone.zip` and have them replace the old `ONDA.app`. Their
 library is safe — it lives in `~/Library/Application Support/ONDA/`, outside the
 app, so replacing the app never touches it.
 
-## Removing the warning entirely (optional)
-
-To let anyone open it with a normal double-click (no warning), the app must be
-**code-signed and notarized** by Apple, which needs an **Apple Developer account
-($99/year)**. If you go that route I can walk you through:
-`codesign` → `xcrun notarytool submit` → `xcrun stapler staple`.
-
 ## Where ONDA stores data
 
 Tags, USBs, and settings are saved in `~/Library/Application Support/ONDA/` —
