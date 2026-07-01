@@ -21,8 +21,10 @@ bitrate, Camelot keys, undo). See README. Start: python3 music_library.py
 ================================================================================
 """
 
-import os, re, sys, copy, json, uuid, shutil, socket, mimetypes, subprocess, threading, webbrowser, urllib.parse
+import os, re, sys, copy, json, uuid, shutil, socket, atexit, mimetypes, subprocess, threading, webbrowser, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 
 # ============================================================================
 # §1  PATHS & CONSTANTS
@@ -69,26 +71,76 @@ UNDO_MAX = 40
 # ============================================================================
 def default_library():
     return {"folder": "", "sources": [], "fields": [], "tracks": {}, "usbs": [], "active_usb": "",
-            "auto_file": False, "usb_mode": "copy", "crate_base": "", "crates": []}
+            "auto_file": False, "usb_mode": "copy", "crate_base": "", "crates": [], "welcomed": False}
+
+# In-memory canonical library: parse the JSON once, then keep it in RAM as the source
+# of truth while running. Every route already runs under LIB_LOCK, so this is safe and
+# removes a full disk-read + JSON-parse from every API call. Persistence is write-behind
+# (debounced + coalesced) so a burst of edits becomes a single disk write; a flush runs
+# on exit. On-disk JSON is compact (smaller file -> faster to read/write/parse).
+_LIB = None
+_DIRTY = False
+_SAVE_TIMER = None
+_SAVE_DELAY = 0.8   # seconds
 
 def load_library():
-    lib = default_library()
-    if os.path.exists(LIBRARY_PATH):
-        try:
-            with open(LIBRARY_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            for k in lib:
-                if k in data:
-                    lib[k] = data[k]
-        except Exception:
-            pass
-    return lib
+    global _LIB
+    if _LIB is None:
+        lib = default_library()
+        if os.path.exists(LIBRARY_PATH):
+            try:
+                with open(LIBRARY_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for k in lib:
+                    if k in data:
+                        lib[k] = data[k]
+            except Exception:
+                pass
+        _LIB = lib
+    return _LIB
 
-def save_library(lib):
+def _write_library_to_disk(lib):
     tmp = LIBRARY_PATH + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(lib, f, indent=2, ensure_ascii=False)
+        json.dump(lib, f, ensure_ascii=False, separators=(",", ":"))
     os.replace(tmp, LIBRARY_PATH)
+
+def _flush_locked():
+    """Persist if dirty. Assumes the caller already holds LIB_LOCK."""
+    global _DIRTY, _SAVE_TIMER
+    if _SAVE_TIMER is not None:
+        _SAVE_TIMER.cancel(); _SAVE_TIMER = None
+    if _DIRTY and _LIB is not None:
+        _write_library_to_disk(_LIB)
+        _DIRTY = False
+
+def _flush_from_timer():
+    global _SAVE_TIMER
+    with LIB_LOCK:
+        _SAVE_TIMER = None
+        try:
+            _flush_locked()
+        except Exception:
+            pass
+
+def flush_library():
+    """Force a synchronous persist now (acquires LIB_LOCK). For atexit / shutdown."""
+    with LIB_LOCK:
+        _flush_locked()
+
+def save_library(lib, immediate=False):
+    """Update the canonical library and schedule a debounced disk write.
+    Routes call this while holding LIB_LOCK; pass immediate=True to write synchronously
+    within that locked section (do NOT call flush_library() from inside the lock)."""
+    global _LIB, _DIRTY, _SAVE_TIMER
+    _LIB = lib
+    _DIRTY = True
+    if immediate:
+        _flush_locked(); return
+    if _SAVE_TIMER is None:
+        _SAVE_TIMER = threading.Timer(_SAVE_DELAY, _flush_from_timer)
+        _SAVE_TIMER.daemon = True
+        _SAVE_TIMER.start()
 
 def safe_name(name):
     return re.sub(r'[<>:"/\\|?*]', "_", (name or "").strip()).strip() or "Untitled"
@@ -346,6 +398,21 @@ def write_file_tags(path, genre=None, notes=None, struct=None, artist=None, titl
         return False, str(e)
 
 def get_cover(path):
+    # Cache extracted artwork keyed by (mtime, size) so re-renders / re-scrolls don't
+    # re-open and re-parse the same file. Identical bytes out; bounded memory.
+    if not path:
+        return None, None
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None, None
+    return _cover_cached(path, st.st_mtime_ns, st.st_size)
+
+@lru_cache(maxsize=128)
+def _cover_cached(path, _mtime, _size):
+    return _extract_cover(path)
+
+def _extract_cover(path):
     _require_mutagen()
     import mutagen
     try:
@@ -535,10 +602,18 @@ def scan_folder(folder, lib, source=None):
         for name in files:
             if not name.startswith(".") and name.lower().endswith(AUDIO_EXTS):
                 found.append(os.path.join(root, name))
-    seen = set()
-    for path in found:
-        lib["tracks"][path] = _build_track(path, lib, source)
-        seen.add(path)
+    seen = set(found)
+    # Reading tags (mutagen) is I/O-bound: overlap the reads across a small thread pool.
+    # _build_track only READS lib here, so concurrent reads are safe; results are assigned
+    # sequentially afterward, giving byte-for-byte the same library as the serial version.
+    if len(found) > 4:
+        with ThreadPoolExecutor(max_workers=min(8, (os.cpu_count() or 4) * 2)) as ex:
+            built = list(ex.map(lambda p: (p, _build_track(p, lib, source)), found))
+        for path, tr in built:
+            lib["tracks"][path] = tr
+    else:
+        for path in found:
+            lib["tracks"][path] = _build_track(path, lib, source)
     for path in list(lib["tracks"].keys()):
         if path in seen:
             continue
@@ -560,9 +635,9 @@ def reconcile_usb(lib):
         if not base or not os.path.isdir(base):
             continue
         available.add(usb["id"])
+        base_abs = os.path.abspath(base)               # hoisted out of the walk loop
         for root, _d, files in os.walk(base):
-            same = os.path.abspath(root) == os.path.abspath(base)
-            genre = "" if same else os.path.basename(root)
+            genre = "" if os.path.abspath(root) == base_abs else os.path.basename(root)
             for fn in files:
                 if not fn.startswith(".") and fn.lower().endswith(AUDIO_EXTS):
                     on_disk.setdefault(fn, (usb["id"], genre))
@@ -580,12 +655,15 @@ def reconcile_usb(lib):
     return changed
 
 def all_tracks(lib):
-    out = []
-    for path in list(lib["tracks"].keys()):
+    tracks = lib["tracks"]
+    out, missing = [], []
+    for path, tr in tracks.items():        # single pass; no second dict lookup per row
         if os.path.isfile(path):
-            out.append(lib["tracks"][path])
+            out.append(tr)
         else:
-            del lib["tracks"][path]
+            missing.append(path)
+    for path in missing:
+        del tracks[path]
     out.sort(key=lambda t: (t.get("title") or t.get("filename") or "").lower())
     return out
 
@@ -783,12 +861,18 @@ class Handler(BaseHTTPRequestHandler):
                 "active_usb": lib["active_usb"], "auto_file": lib.get("auto_file", False),
                 "usb_mode": lib.get("usb_mode", "copy"),
                 "crate_base": lib.get("crate_base", ""), "crates": crates_payload(lib),
+                "welcomed": lib.get("welcomed", False),
                 "can_undo": len(UNDO) > 0, "can_redo": len(REDO) > 0, "tracks": all_tracks(lib)}
 
     def _route_api_state(self):
         with LIB_LOCK:
             lib = load_library(); payload = self._state_payload(lib); save_library(lib)
         self._json(payload)
+
+    def _route_api_set_welcomed(self):
+        with LIB_LOCK:
+            lib = load_library(); lib["welcomed"] = True; save_library(lib)
+        self._json({"ok": True})
 
     def _route_api_pick_folder(self):
         with LIB_LOCK:
@@ -1245,7 +1329,7 @@ class Handler(BaseHTTPRequestHandler):
                         os.rmdir(d)
                 except Exception:
                     pass
-            lib = e["before"]
+            lib = copy.deepcopy(e["before"])   # copy so the canonical lib never aliases history
             self._reembed(lib, e.get("touched", []))
             save_library(lib); REDO.append(e)
             payload = self._state_payload(lib); payload["undone"] = e["label"]
@@ -1273,7 +1357,7 @@ class Handler(BaseHTTPRequestHandler):
                         os.makedirs(os.path.dirname(dst), exist_ok=True); shutil.copy2(src, dst)
                 except Exception:
                     pass
-            lib = e["after"] if e.get("after") is not None else e["before"]
+            lib = copy.deepcopy(e["after"] if e.get("after") is not None else e["before"])
             self._reembed(lib, e.get("touched", []))
             save_library(lib); UNDO.append(e)
             payload = self._state_payload(lib); payload["redone"] = e["label"]
@@ -1362,7 +1446,9 @@ def _idle(server):
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\nShutting down."); server.shutdown()
+        print("\nShutting down.")
+    finally:
+        flush_library(); server.shutdown()
 
 APP_WINDOW_BROWSERS = (
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -1373,6 +1459,7 @@ APP_WINDOW_BROWSERS = (
 
 def main():
     _require_mutagen()
+    atexit.register(flush_library)   # never lose pending write-behind changes on exit
     if not os.path.exists(APP_HTML_PATH):
         print("ERROR: app.html is missing. Keep music_library.py and app.html together.")
         sys.exit(1)

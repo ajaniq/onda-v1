@@ -55,6 +55,7 @@
          padding:7px 11px;border-radius:3px;cursor:pointer;font-size:12px;letter-spacing:.02em}
   button:hover{border-color:var(--accent)}
   button:disabled{opacity:.4;cursor:default} button:disabled:hover{border-color:var(--line2)}
+  button.tgl.on{border-color:var(--accent);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
   button.go{background:transparent;border-color:var(--accent);color:var(--accent);font-weight:600}
   button.link{background:transparent;border:none;color:var(--muted)}
@@ -96,13 +97,15 @@
   main{flex:1;overflow:auto;min-width:0}
   .toolbar{display:flex;gap:9px;align-items:center;padding:9px 14px;color:var(--muted);
            border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:20;flex-wrap:wrap}
-  table{border-collapse:collapse;width:100%}
+  table{border-collapse:separate;border-spacing:0;width:100%}   /* separate = sticky th works in WKWebView */
   th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:middle}
-  thead th{position:sticky;top:46px;background:var(--panel);font-size:10px;letter-spacing:.1em;
+  thead th{position:sticky;top:var(--toolbarH,44px);background:var(--panel);font-size:10px;letter-spacing:.1em;
      text-transform:uppercase;color:var(--muted);z-index:10;font-weight:600}
   th.sortable{cursor:pointer;user-select:none} th.sortable:hover{color:var(--text)}
   th.sorted{color:var(--accent)}
   tbody tr{background:var(--row)}
+  /* skip layout/paint for off-screen rows; 'auto' remembers real height (no scroll jump). */
+  tbody tr{content-visibility:auto;contain-intrinsic-size:auto 56px}
   tbody tr:hover td{background:var(--rowhover)}
   tr.playing td{background:var(--sel)}
   tr.playing{box-shadow:inset 3px 0 0 var(--accent)}
@@ -199,10 +202,13 @@
   #crateZone{min-height:34px;border-radius:4px;border:1px dashed transparent;transition:.12s}
   #crateZone.zonedrag{border-color:var(--accent);background:var(--inset)}
   .rownum{color:var(--muted);font-size:10px;text-align:right;padding-right:8px}
+  .gchead{cursor:pointer;user-select:none;font-size:12px;font-weight:600;margin:6px 0 2px;display:flex;align-items:center;gap:6px}
+  .gchead #gcArrow{font-size:9px;color:var(--muted)}
+  .dragghost{position:fixed;top:-1000px;left:-1000px;background:var(--accent);color:#000;font-weight:600;font-size:12px;padding:6px 12px;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.4);pointer-events:none;white-space:nowrap;z-index:9999}
+  #tableWrap tbody tr.dragging td{background:var(--sel)}
   .usbprog{display:inline-flex;align-items:center;gap:6px;font-size:10px}
   .usbprogbar{width:90px;height:7px;background:var(--inset);border:1px solid var(--line2);border-radius:4px;overflow:hidden}
   .usbprogbar i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
-  th{position:relative}
   .colres{position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;user-select:none}
   .colres:hover{background:var(--accent);opacity:.5}
   .searchwrap{position:relative;display:inline-block}
@@ -212,11 +218,10 @@
   .sghint{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em}
   .pbbtn:hover{border-color:var(--accent)}
   .pbtime{font-size:11px;color:var(--muted);font-family:"SF Mono",Menlo,monospace;min-width:36px;text-align:center;flex:none}
-  .pbseek{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;background:var(--line2);outline:none;cursor:pointer}
-  .pbseek::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:transparent}
-  .pbseek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;margin-top:-4px;border-radius:50%;background:var(--accent);cursor:pointer;border:none;box-shadow:0 0 0 2px var(--panel)}
-  .pbseek::-moz-range-track{height:4px;border-radius:2px;background:transparent}
-  .pbseek::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 0 2px var(--panel)}
+  .pbseek{position:relative;flex:1;height:16px;cursor:pointer;display:flex;align-items:center}
+  .pbseek .pbtrack{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:4px;border-radius:2px;background:var(--line2)}
+  .pbseek .pbfill{position:absolute;left:0;top:50%;transform:translateY(-50%);height:4px;border-radius:2px;background:var(--accent);width:0}
+  .pbseek .pbthumb{position:absolute;top:50%;left:0;width:12px;height:12px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%);box-shadow:0 0 0 2px var(--panel);pointer-events:none}
   .crate .cfolder{color:var(--accent);display:flex;align-items:center;flex:none}
 </style>
 </head>
@@ -254,7 +259,8 @@
       <div id="crateZone" ondragover="crateZoneOver(event)" ondragleave="crateZoneLeave()" ondrop="crateZoneDrop(event)" title="Drop a folder here to add it as a crate">
         <div id="crateTree"></div></div></div></div>
     <div class="sbsec" data-sec="genre"><h3 onclick="toggleSec('genre')">Genre</h3><div class="sbbody">
-      <button id="gcleanBtn" onclick="openGenreClean()" style="width:100%;margin-bottom:8px" title="Review &amp; merge duplicate genre spellings, or manually combine genres — always asks before changing">🧹 Clean genres…</button>
+      <button id="gcleanBtn" onclick="openGenreClean()" style="width:100%;margin-bottom:8px" title="Review &amp; merge duplicate genre spellings, or manually combine genres — always asks before changing">Clean genres…</button>
+      <button id="genreUsbOnly" class="tgl" style="width:100%;margin-bottom:6px;font-size:11px" onclick="toggleGenreUsbOnly()" title="Show only genres that have tracks on the active USB">Only genres on active USB</button>
       <div id="genreSelBar" class="gselbar" style="display:none"></div>
       <div id="fGenre"></div></div></div>
     <div class="sbsec" data-sec="energy"><h3 onclick="toggleSec('energy')">Energy</h3><div class="sbbody">
@@ -272,9 +278,11 @@
 
   <main>
     <div class="toolbar">
-      <label class="chk"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> Select all shown</label>
-      <label class="chk" title="Show only the tracks you've selected"><input type="checkbox" id="showSel" onchange="toggleShowSelected()"> Show selected</label>
-      <label class="chk" title="Show tracks you've hidden (they jump to the top) so you can unhide them"><input type="checkbox" id="showHidden" onchange="toggleShowHidden()"> Show hidden</label>
+      <button id="selAllBtn" class="tgl" onclick="toggleSelectAll()" title="Select or deselect all shown tracks">Select all shown</button>
+      <button id="showSelBtn" class="tgl" onclick="toggleShowSelected()" title="Show only the tracks you've selected">Show selected</button>
+      <button id="showHiddenBtn" class="tgl" onclick="toggleShowHidden()" title="Show tracks you've hidden (they jump to the top)">Show hidden</button>
+      <button onclick="hideSelected()" title="Hide all selected tracks from the list">Hide selected</button>
+      <button onclick="unhideAll()" title="Unhide every hidden track">Unhide all</button>
       <span class="count" id="count">0 tracks</span>
       <span class="usbprog" id="usbProg" title="Songs on the active USB vs. your whole library"><span class="usbprogbar"><i id="usbProgFill"></i></span><span id="usbProgTxt" class="muted"></span></span>
       <span class="spacer"></span>
@@ -365,6 +373,7 @@
   <div class="dialog" style="width:500px;align-items:stretch;text-align:left">
     <h4 style="margin:0">Clean up genres</h4>
     <p class="muted" style="font-size:11px;margin:2px 0;line-height:1.5"><b style="color:var(--text)">Pre-checked (auto)</b> = real spelling duplicates: differences in spacing, punctuation, <i>(notes)</i>, or known abbreviations — e.g. JerseyClub=Jersey Club, SPEED GARAGE (ISH)=Speed Garage, DnB=Drum&nbsp;&amp;&nbsp;Bass.<br><b style="color:var(--text)">Unchecked (your OK needed)</b> = capitalization-only changes (WORLD→World, HOUSE→House) and look-alikes. Sub-genres are never merged into parents. Edit the “→” name for any group.</p>
+    <div class="gchead" onclick="toggleGcBody()"><span id="gcArrow">▾</span> Suggested cleanups <span id="gcCount" class="muted"></span></div>
     <div id="gcBody" class="ref"></div>
     <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px">
       <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Manually combine — check any genres below, then type the name they should all become:</div>
@@ -398,7 +407,7 @@
   <div class="np"><div class="t" id="npTitle">Nothing playing</div><div class="a" id="npArtist"></div></div>
   <button class="pbbtn" id="pbBtn" onclick="pbToggle()" title="Play / pause"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
   <span class="pbtime" id="pbCur">0:00</span>
-  <input type="range" class="pbseek" id="pbSeek" min="0" max="1000" value="0" step="1" oninput="pbSeekInput(this.value)" onchange="pbSeekCommit(this.value)" title="Seek">
+  <div class="pbseek" id="pbSeek" onmousedown="pbSeekDown(event)" title="Seek"><div class="pbtrack"></div><div class="pbfill" id="pbFill"></div><div class="pbthumb" id="pbThumb"></div></div>
   <span class="pbtime" id="pbDur">0:00</span>
   <audio id="player" preload="none"></audio>
 </div>
@@ -408,7 +417,11 @@
 <script>
 let TRACKS=[], FIELDS=[], USBS=[], ACTIVE_USB="";
 let SELECTED=new Set(), RATING_FILTER=0, NOW=null, CAN_UNDO=false, CAN_REDO=false, GMENU_OWNER=null;
-let GENRE_SEL=new Set(), GENRE_ORDER=[], GENRE_LAST=null;
+let GENRE_SEL=new Set(), GENRE_ORDER=[], GENRE_LAST=null, GENRE_USB_ONLY=false;
+let TByPath=new Map();   // path -> track, rebuilt when TRACKS changes (fast lookups)
+let TIdx=new Map();      // path -> index into TRACKS (cells need the TRACKS index)
+function rebuildIndex(){TByPath=new Map();TIdx=new Map();_libValCache={};
+  TRACKS.forEach((t,i)=>{TByPath.set(t.path,t);TIdx.set(t.path,i);});}
 let COLS={}; try{COLS=JSON.parse(localStorage.getItem('djlib-cols')||'{}');}catch(e){COLS={};}
 let COLW={}; try{COLW=JSON.parse(localStorage.getItem('djlib-colw')||'{}');}catch(e){COLW={};}
 let KEY_MODE=localStorage.getItem('djlib-keymode')||'camelot';
@@ -472,15 +485,17 @@ async function init(){
   syncThemeBtn();restoreSidebar();
   const s=await api('/api/state');applyState(s);
   buildFilters();render();
-  if(!localStorage.getItem('onda-welcomed')) document.getElementById('welcome').style.display='flex';
+  // "welcomed" now lives in the library file so it survives app restarts (localStorage can reset)
+  if(!s.welcomed && !localStorage.getItem('onda-welcomed')) document.getElementById('welcome').style.display='flex';
 }
+async function markWelcomed(){localStorage.setItem('onda-welcomed','1');try{await api('/api/set_welcomed');}catch(_){}}
 function restoreSidebar(){let st={};try{st=JSON.parse(localStorage.getItem('onda-sb')||'{}');}catch(e){}
   Object.keys(st).forEach(sec=>{if(st[sec]){const el=document.querySelector('.sbsec[data-sec="'+sec+'"]');if(el)el.classList.add('collapsed');}});}
 function toggleSec(sec){const el=document.querySelector('.sbsec[data-sec="'+sec+'"]');if(!el)return;
   el.classList.toggle('collapsed');let st={};try{st=JSON.parse(localStorage.getItem('onda-sb')||'{}');}catch(e){}
   st[sec]=el.classList.contains('collapsed');localStorage.setItem('onda-sb',JSON.stringify(st));}
-function welcomeStart(){localStorage.setItem('onda-welcomed','1');document.getElementById('welcome').style.display='none';startTour();}
-function welcomeSkip(){localStorage.setItem('onda-welcomed','1');localStorage.setItem('onda-toured','1');document.getElementById('welcome').style.display='none';}
+function welcomeStart(){markWelcomed();document.getElementById('welcome').style.display='none';startTour();}
+function welcomeSkip(){markWelcomed();localStorage.setItem('onda-toured','1');document.getElementById('welcome').style.display='none';}
 function openHelp(){document.getElementById('help').style.display='flex';}
 function closeHelp(){document.getElementById('help').style.display='none';}
 
@@ -522,8 +537,8 @@ function endTour(){localStorage.setItem('onda-toured','1');
 async function setUsbModeVal(m){await api('/api/set_usb_mode',{mode:m});
   toast(m==='copy'?'USB mode: Copy — your originals stay put':'USB mode: Move — files relocate into the USB');}
 async function reveal(i){await api('/api/reveal',{path:TRACKS[i].path});}
-function toggleShowHidden(){SHOW_HIDDEN=document.getElementById('showHidden').checked;render();}
-function toggleShowSelected(){SHOW_SELECTED=document.getElementById('showSel').checked;render();}
+function toggleShowHidden(){SHOW_HIDDEN=!SHOW_HIDDEN;_setTgl('showHiddenBtn',SHOW_HIDDEN);render();}
+function toggleShowSelected(){SHOW_SELECTED=!SHOW_SELECTED;_setTgl('showSelBtn',SHOW_SELECTED);render();}
 /* ---- genre cleanup ---- */
 let GPLAN={_all:[]};
 async function openGenreClean(){
@@ -531,6 +546,7 @@ async function openGenreClean(){
   const all=[...(r.auto||[]).map(g=>({...g,safe:true})),...(r.review||[]).map(g=>({...g,safe:false}))];
   GPLAN={_all:all};
   const body=document.getElementById('gcBody');
+  document.getElementById('gcCount').textContent=all.length?`(${all.length})`:'';
   if(!all.length){body.innerHTML='<p class="muted" style="padding:10px 4px">No duplicate genres found 🎉</p>';}
   else body.innerHTML=all.map((g,i)=>{
     const members=g.members.map(m=>`${esc(m.genre)} (${m.count})`).join(',  ');
@@ -547,6 +563,8 @@ async function openGenreClean(){
   document.getElementById('genreClean').style.display='flex';
 }
 function closeGenreClean(){document.getElementById('genreClean').style.display='none';}
+function toggleGcBody(){const b=document.getElementById('gcBody'),a=document.getElementById('gcArrow');
+  const hide=b.style.display!=='none'; b.style.display=hide?'none':''; a.textContent=hide?'▸':'▾';}
 async function applyGenreClean(){
   const all=GPLAN._all||[], merges=[];
   document.querySelectorAll('.gcChk').forEach(chk=>{
@@ -566,6 +584,14 @@ async function applyGenreClean(){
 }
 function hideTrack(i){TRACKS[i].hidden=true;doSave(TRACKS[i]);render();toast('Hidden — turn on “Show hidden” to bring it back');}
 function unhideTrack(i){TRACKS[i].hidden=false;doSave(TRACKS[i]);render();toast('Unhidden');}
+function hideSelected(){
+  if(SELECTED.size===0){toast('Select some tracks first');return;}
+  let n=0; TRACKS.forEach(t=>{if(SELECTED.has(t.path)&&!t.hidden){t.hidden=true;doSave(t);n++;}});
+  SELECTED.clear(); render(); toast(`Hid ${n} track(s) — turn on “Show hidden” to bring them back`);}
+function unhideAll(){
+  let n=0; TRACKS.forEach(t=>{if(t.hidden){t.hidden=false;doSave(t);n++;}});
+  if(!n){toast('No hidden tracks');return;}
+  render(); toast(`Unhid ${n} track(s)`);}
 function applyState(s){
   if(s.fields)FIELDS=s.fields; if(s.tracks)TRACKS=s.tracks;
   if(s.usbs)USBS=s.usbs; if(s.active_usb!==undefined)ACTIVE_USB=s.active_usb;
@@ -677,12 +703,24 @@ function rowDrag(e,path){
   DRAG_PATHS=(SELECTED.has(path)&&SELECTED.size>1)?[...SELECTED]:[path];
   e.dataTransfer.effectAllowed='copyMove';
   try{e.dataTransfer.setData('text/plain',DRAG_PATHS.join('\n'));}catch(_){}
+  // show how many tracks you're dragging (a single row's ghost is misleading for a group)
+  if(DRAG_PATHS.length>1){
+    let g=document.getElementById('dragGhost');
+    if(!g){g=document.createElement('div');g.id='dragGhost';g.className='dragghost';document.body.appendChild(g);}
+    g.textContent=`⠿  ${DRAG_PATHS.length} tracks`; g.style.display='block';
+    try{e.dataTransfer.setDragImage(g,18,14);}catch(_){}
+  }
+  // also tint the selected rows so it's clear what's moving
+  document.querySelectorAll('#tableWrap tbody tr').forEach(tr=>{
+    if(DRAG_PATHS.includes(tr.getAttribute('data-path')))tr.classList.add('dragging');});
 }
 /* only crates and the USB box accept drops — block everything else (BPM/energy ranges, search, cells) */
 function _isDropTarget(t){return t&&t.closest&&(t.closest('.crate')||t.closest('#usbBox'));}
 document.addEventListener('dragover',e=>{if(DRAG_PATHS.length&&!_isDropTarget(e.target)){e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='none';}});
 document.addEventListener('drop',e=>{if(DRAG_PATHS.length&&!_isDropTarget(e.target))e.preventDefault();});
-document.addEventListener('dragend',()=>{DRAG_PATHS=[];});
+document.addEventListener('dragend',()=>{DRAG_PATHS=[];
+  const g=document.getElementById('dragGhost'); if(g)g.style.display='none';
+  document.querySelectorAll('#tableWrap tbody tr.dragging').forEach(tr=>tr.classList.remove('dragging'));});
 /* let you select text in title/artist/etc.: only drag the row when grabbing a non-input area */
 document.addEventListener('mousedown',e=>{const tr=e.target.closest&&e.target.closest('#tableWrap tbody tr');
   if(!tr)return; tr.draggable=!e.target.closest('input,select,textarea,button,.stars,.keychip,.pill');},true);
@@ -730,7 +768,8 @@ function usbDot(g){return genreOnUsb(g)?'<span class="usbdot" title="On the acti
 function buildFilters(){
   refreshUsbSet();
   const keepG=new Set(checkedVals('fg')), keepK=new Set(checkedVals('fk')), keepT=new Set(checkedVals('ft'));
-  const gen=genreList();
+  const genAll=genreList();
+  const gen=GENRE_USB_ONLY?genAll.filter(g=>genreOnUsb(g)):genAll;
   GENRE_ORDER=gen; GENRE_SEL=new Set([...GENRE_SEL].filter(x=>gen.includes(x)));
   document.getElementById('fGenre').innerHTML=gen.length?gen.map(g=>
     `<div class="frow" data-g="${escAttr(g)}"><input type="checkbox" class="fg" value="${esc(g)}" onchange="render()" title="Filter the list by this genre">`+
@@ -743,7 +782,7 @@ function buildFilters(){
   document.getElementById('fTags').innerHTML=tags.length?tags.map(tg=>
     `<label class="chk"><input type="checkbox" class="ft" value="${esc(tg)}" onchange="render()"> ${esc(tg)}</label>`).join(''):'<span class="muted">—</span>';
   const dl=document.getElementById('genreOptions');
-  if(dl)dl.innerHTML=gen.map(g=>`<option value="${esc(g)}">`).join('');
+  if(dl)dl.innerHTML=genAll.map(g=>`<option value="${esc(g)}">`).join('');
   document.querySelectorAll('.fg').forEach(c=>{if(keepG.has(c.value))c.checked=true;});
   document.querySelectorAll('.fk').forEach(c=>{if(keepK.has(c.value))c.checked=true;});
   document.querySelectorAll('.ft').forEach(c=>{if(keepT.has(c.value))c.checked=true;});
@@ -767,6 +806,8 @@ function reflectGenreSel(){
   bar.innerHTML=`<span>${n} selected</span><span class="spacer"></span><span class="gselact" onclick="deleteSelectedGenres()">🗑 Delete</span><span class="gselact" onclick="clearGenreSel()">Clear</span>`;
 }
 function clearGenreSel(){GENRE_SEL.clear();GENRE_LAST=null;reflectGenreSel();}
+function toggleGenreUsbOnly(){GENRE_USB_ONLY=!GENRE_USB_ONLY;_setTgl('genreUsbOnly',GENRE_USB_ONLY);buildFilters();
+  if(GENRE_USB_ONLY&&!ACTIVE_USB)toast('Pick an active USB to see its genres');}
 async function deleteSelectedGenres(){
   const gs=[...GENRE_SEL]; if(!gs.length)return;
   if(!confirm(`Delete ${gs.length} genre(s) from ALL tracks?\nTheir genre will be cleared (files already on a USB stay where they are).`))return;
@@ -781,7 +822,9 @@ function setRatingFilter(n){RATING_FILTER=(n===RATING_FILTER)?0:n;renderRatingFi
 function checkedVals(c){return [...document.querySelectorAll('.'+c+':checked')].map(e=>e.value);}
 function clearFilters(){document.querySelectorAll('aside input[type=checkbox]').forEach(c=>c.checked=false);
   ['eMin','eMax','bMin','bMax'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('search').value='';RATING_FILTER=0;renderRatingFilter();render();}
+  document.getElementById('search').value='';RATING_FILTER=0;
+  GENRE_USB_ONLY=false;_setTgl('genreUsbOnly',false);
+  renderRatingFilter();buildFilters();render();}
 function num(id){const v=document.getElementById(id).value;return v===''?null:parseFloat(v);}
 /* ---- smart search ---------------------------------------------------- */
 const _FIELD_ALIASES={g:'genre',genre:'genre',a:'artist',artist:'artist',title:'title',ti:'title',
@@ -846,12 +889,18 @@ function matchSearch(t){
   return true;
 }
 /* ---- search autocomplete --------------------------------------------- */
-function onSearchInput(){_qCache.raw=null;render();showSug();}
-function _libValues(field){const s=new Set();for(const t of TRACKS){
-  if(field==='tags'){(t.tags||[]).forEach(x=>x&&s.add(String(x)));}
-  else if(field==='key'){if(t.key)s.add(String(t.key));}
-  else{const v=t[field];if(v!==undefined&&v!==null&&v!=='')s.add(String(v));}}
-  return [...s].sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:1);}
+let _searchTimer=null;
+function onSearchInput(){_qCache.raw=null;showSug();
+  clearTimeout(_searchTimer);_searchTimer=setTimeout(render,140);}  // debounce: don't rebuild every row per keystroke
+let _libValCache={};   // per-field unique value lists; cleared on data change (rebuildIndex)
+function _libValues(field){
+  if(_libValCache[field])return _libValCache[field];
+  const s=new Set();for(const t of TRACKS){
+    if(field==='tags'){(t.tags||[]).forEach(x=>x&&s.add(String(x)));}
+    else if(field==='key'){if(t.key)s.add(String(t.key));}
+    else{const v=t[field];if(v!==undefined&&v!==null&&v!=='')s.add(String(v));}}
+  const out=[...s].sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:1);
+  _libValCache[field]=out; return out;}
 function _quote(v){return /\s/.test(v)?'"'+v+'"':v;}
 function _lastTok(s){const m=s.match(/(\S*)$/);return m?m[1]:'';}
 function showSug(){
@@ -889,19 +938,26 @@ function searchKey(e){
   else if(e.key==='Escape'){hideSug();return;}
   else return;
   items.forEach(x=>x.classList.remove('sel'));if(i>=0)items[i].classList.add('sel');}
-function passes(t){
-  if(t.hidden && !SHOW_HIDDEN) return false;
-  if(SHOW_SELECTED && !SELECTED.has(t.path)) return false;
-  if(CURRENT_SOURCE && t.source!==CURRENT_SOURCE) return false;
+// Read every filter control ONCE (these do DOM queries). Reused across all tracks so a
+// full filter pass costs O(tracks), not O(tracks × DOM-queries).
+function filterCtx(){
+  return {sh:SHOW_HIDDEN, ss:SHOW_SELECTED, src:CURRENT_SOURCE, rating:RATING_FILTER,
+    gs:checkedVals('fg'), ks:checkedVals('fk'), ts:checkedVals('ft'),
+    eMin:num('eMin'), eMax:num('eMax'), bMin:num('bMin'), bMax:num('bMax')};
+}
+function passes(t, ctx){
+  ctx = ctx || filterCtx();   // fall back for any lone caller
+  if(t.hidden && !ctx.sh) return false;
+  if(ctx.ss && !SELECTED.has(t.path)) return false;
+  if(ctx.src && t.source!==ctx.src) return false;
   if(!matchSearch(t))return false;
-  const gs=checkedVals('fg');if(gs.length&&!gs.includes(t.genre))return false;
-  const ks=checkedVals('fk');if(ks.length&&!ks.includes(keyId(t.key)))return false;
-  const ts=checkedVals('ft');if(ts.length&&!ts.some(x=>(t.tags||[]).includes(x)))return false;
-  const eMin=num('eMin'),eMax=num('eMax');
-  if(eMin!==null&&(t.energy||0)<eMin)return false; if(eMax!==null&&(t.energy||0)>eMax)return false;
-  if(RATING_FILTER&&(t.rating||0)<RATING_FILTER)return false;
-  const bMin=num('bMin'),bMax=num('bMax'),bpm=parseFloat(t.bpm);
-  if(bMin!==null&&(!bpm||bpm<bMin))return false; if(bMax!==null&&(!bpm||bpm>bMax))return false;
+  if(ctx.gs.length&&!ctx.gs.includes(t.genre))return false;
+  if(ctx.ks.length&&!ctx.ks.includes(keyId(t.key)))return false;
+  if(ctx.ts.length&&!ctx.ts.some(x=>(t.tags||[]).includes(x)))return false;
+  if(ctx.eMin!==null&&(t.energy||0)<ctx.eMin)return false; if(ctx.eMax!==null&&(t.energy||0)>ctx.eMax)return false;
+  if(ctx.rating&&(t.rating||0)<ctx.rating)return false;
+  const bpm=parseFloat(t.bpm);
+  if(ctx.bMin!==null&&(!bpm||bpm<ctx.bMin))return false; if(ctx.bMax!==null&&(!bpm||bpm>ctx.bMax))return false;
   return true;
 }
 
@@ -937,7 +993,7 @@ function colDefs(){
     {key:'track',always:1,th:'Track',sortKey:'title',cell:trackCell},
     {key:'genre',th:'Genre',sortKey:'genre',cell:(t,i)=>`<td><div class="genrewrap">
         ${genreOnUsb(t.genre)?'<span class="usbdot" title="This genre is on the active USB"></span>':''}
-        <input class="cell" list="genreOptions" value="${esc(t.genre||'')}" onchange="setGenre(${i},this.value)" placeholder="genre">
+        <input class="cell" list="genreOptions" value="${esc(t.genre||'')}" onchange="setGenre(${i},this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();setGenre(${i},this.value);render();}" placeholder="genre">
         <button class="gbtn" onclick="openGenreMenu(event,${i})" title="Pick / delete existing genres">▾</button></div></td>`},
     {key:'energy',th:'En',sortKey:'energy',cell:(t,i)=>{let eo='<option value="0"></option>';for(let e=1;e<=10;e++)eo+=`<option value="${e}" ${t.energy==e?'selected':''}>${e}</option>`;
         return `<td><select class="cell" onchange="setField(${i},'energy',parseInt(this.value))">${eo}</select></td>`;}},
@@ -969,7 +1025,9 @@ function trackCell(t,i){
 
 /* render */
 function render(){
-  let rows=TRACKS.filter(passes);
+  rebuildIndex();
+  const ctx=filterCtx();                     // read filter controls once, not per-track
+  let rows=TRACKS.filter(t=>passes(t,ctx));
   refreshUsbSet();
   rows=sortRows(rows);
   if(SHOW_HIDDEN) rows=rows.filter(t=>t.hidden).concat(rows.filter(t=>!t.hidden));  // hidden jump to top
@@ -983,13 +1041,18 @@ function render(){
     if(c.sortKey){const act=SORT.key===c.sortKey;const ar=act?(SORT.dir==='asc'?' ▲':' ▼'):'';
       return `<th class="sortable${act?' sorted':''}" onclick="setSort('${c.sortKey}')">${c.th}${ar}${handle}</th>`;}
     return `<th>${c.th||''}${handle}</th>`;}).join('');
-  const body=rows.map((t,di)=>{const i=TRACKS.indexOf(t);
+  const body=rows.map((t,di)=>{const i=TIdx.get(t.path);   // O(1) index instead of O(n) indexOf → render is O(n), not O(n²)
     return `<tr data-path="${esc(t.path)}" draggable="true" ondragstart="rowDrag(event,'${escAttr(t.path)}')" class="${NOW===t.path?'playing':''}${t.hidden?' hiddenrow':''}">${cols.map(c=>c.cell(t,i,di)).join('')}</tr>`;}).join('');
   document.getElementById('tableWrap').innerHTML=`<table>${colg}<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
-  document.getElementById('selAll').checked=rows.length>0&&rows.every(t=>SELECTED.has(t.path));
+  updateSelAllBtn(rows);
   updateUsbProgress();
+  setStickyOffset();
   recordView();
 }
+/* keep the sticky column headers sitting just below the (wrapping) toolbar */
+function setStickyOffset(){const tb=document.querySelector('.toolbar');
+  if(tb)document.documentElement.style.setProperty('--toolbarH',tb.offsetHeight+'px');}
+window.addEventListener('resize',setStickyOffset);
 /* lightweight updates that DON'T rebuild the table (avoids cover re-load flicker) */
 function updatePlayingUI(){
   document.querySelectorAll('#tableWrap tbody tr').forEach(tr=>{
@@ -1002,20 +1065,26 @@ function refreshChecks(){
   document.querySelectorAll('#tableWrap tbody tr').forEach(tr=>{
     const p=tr.getAttribute('data-path'); const cb=tr.querySelector('input[type=checkbox]'); if(cb)cb.checked=SELECTED.has(p);
   });
-  document.getElementById('selAll').checked=CURRENT_ROWS.length>0&&CURRENT_ROWS.every(p=>SELECTED.has(p));
+  updateSelAllBtn();
   updateCount();
 }
-function updateCount(){const shown=TRACKS.filter(passes).length;
-  document.getElementById('count').textContent=`${shown} / ${TRACKS.length} tracks · ${SELECTED.size} sel`;
+function _setTgl(id,on){const el=document.getElementById(id);if(el)el.classList.toggle('on',!!on);}
+function updateSelAllBtn(rows){
+  const list=rows?rows.map(t=>t.path):CURRENT_ROWS;
+  _setTgl('selAllBtn', list.length>0 && list.every(p=>SELECTED.has(p)));
+}
+function updateCount(){
+  // shown count = what render() already produced; avoid re-running the filter over
+  // every track on each selection change (that predicate is the expensive part).
+  document.getElementById('count').textContent=`${CURRENT_ROWS.length} / ${TRACKS.length} tracks · ${SELECTED.size} sel`;
   updateUsbProgress();}
-/* ---- USB progress bar: how much of the library is on the active USB ---- */
+/* ---- USB progress bar: how much of the shown list is on the active USB ---- */
 function updateUsbProgress(){
   const fill=document.getElementById('usbProgFill'),txt=document.getElementById('usbProgTxt');
   if(!fill||!txt)return;
   const total=CURRENT_ROWS.length;   // out of the songs currently shown in the rows
   if(!ACTIVE_USB||!total){fill.style.width='0';txt.textContent=ACTIVE_USB?'0 on USB':'no active USB';return;}
-  const byPath=new Map(TRACKS.map(t=>[t.path,t]));
-  let on=0; CURRENT_ROWS.forEach(p=>{const t=byPath.get(p); if(t&&t.usb===ACTIVE_USB)on++;});
+  let on=0; for(const p of CURRENT_ROWS){const t=TByPath.get(p); if(t&&t.usb===ACTIVE_USB)on++;}
   const u=USBS.find(x=>x.id===ACTIVE_USB);
   fill.style.width=(on/total*100)+'%';
   txt.textContent=`${on}/${total} on ${u?u.name:'USB'}`;}
@@ -1062,8 +1131,7 @@ async function restoreView(s){
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
   set('search',v.q); _qCache.raw=null;
   set('eMin',v.eMin); set('eMax',v.eMax); set('bMin',v.bMin); set('bMax',v.bMax);
-  const sh=document.getElementById('showHidden'); if(sh)sh.checked=v.sh;
-  const ssx=document.getElementById('showSel'); if(ssx)ssx.checked=v.ss;
+  _setTgl('showHiddenBtn',v.sh); _setTgl('showSelBtn',v.ss);
   const srcSel=document.getElementById('srcSel'); if(srcSel)srcSel.value=v.src;
   buildFilters();
   document.querySelectorAll('.fg').forEach(c=>c.checked=v.fg.includes(c.value));
@@ -1180,7 +1248,7 @@ async function sendToUsb(paths){
   if(!ACTIVE_USB){toast('Pick or create an Active USB first');return;}
   await flushSaves();   // make sure any just-typed genre is saved BEFORE we file to USB
   const r=await api('/api/send_to_usb',{paths});if(r.error){toast(r.error);return;}
-  (r.results||[]).forEach(res=>{const t=TRACKS.find(x=>x.path===res.old);
+  (r.results||[]).forEach(res=>{const t=TByPath.get(res.old);   // O(1) lookup instead of O(n) find
     if(t){const old=res.old;Object.assign(t,res.track);if(SELECTED.has(old)){SELECTED.delete(old);SELECTED.add(t.path);}if(NOW===old)NOW=t.path;}});
   setCanUndo(r.can_undo);setCanRedo(r.can_redo);buildFilters();render();
   const moved=(r.results||[]).filter(x=>x.moved).length, skip=(r.skipped||[]).length;
@@ -1196,18 +1264,24 @@ async function setGenreSelected(){
   if(r.error){toast(r.error);return;}
   applyState(r);buildFilters();render();toast(`Set genre on ${r.changed||0} track(s) · ↩ to undo`);}
 
-/* selection (shift-range supported), no full re-render so cover art doesn't flicker */
+/* selection (shift-range supported), no full re-render so cover art doesn't flicker.
+   Only the checkboxes that actually changed are touched (O(changed)) rather than every
+   row in the DOM (O(all)) — this keeps selecting snappy in large libraries. */
 function rowCheck(e,di,path){
+  const tbody=document.querySelector('#tableWrap tbody');
   if(e.shiftKey && LAST_IDX!==null && CURRENT_ROWS.length){
     const a=Math.min(LAST_IDX,di), b=Math.max(LAST_IDX,di);
-    for(let k=a;k<=b;k++) SELECTED.add(CURRENT_ROWS[k]);
+    for(let k=a;k<=b;k++){SELECTED.add(CURRENT_ROWS[k]);
+      const r=tbody&&tbody.rows[k], cb=r&&r.querySelector('input[type=checkbox]'); if(cb)cb.checked=true;}
   } else {
     if(SELECTED.has(path)) SELECTED.delete(path); else SELECTED.add(path);
+    // the clicked checkbox already reflects its new state via the native toggle
   }
-  LAST_IDX=di; refreshChecks();
+  LAST_IDX=di; updateSelAllBtn(); updateCount();
 }
-function toggleSelectAll(){const on=document.getElementById('selAll').checked;
-  CURRENT_ROWS.forEach(p=>on?SELECTED.add(p):SELECTED.delete(p));refreshChecks();}
+function toggleSelectAll(){
+  const allOn=CURRENT_ROWS.length>0 && CURRENT_ROWS.every(p=>SELECTED.has(p));
+  CURRENT_ROWS.forEach(p=>allOn?SELECTED.delete(p):SELECTED.add(p));refreshChecks();}
 async function exportSelected(){if(SELECTED.size===0){toast('Select some tracks first');return;}
   toast('Choose a destination in the dialog…');
   const r=await api('/api/export',{paths:[...SELECTED]});
@@ -1239,17 +1313,23 @@ const PAUSE_SVG='<svg width="12" height="12" viewBox="0 0 24 24" fill="currentCo
 let SEEKING=false;
 function pbFmt(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function pbToggle(){if(!player.src)return;player.paused?player.play():player.pause();}
-function pbSeekInput(v){SEEKING=true;if(player.duration){const t=(v/1000)*player.duration;
-  document.getElementById('pbCur').textContent=pbFmt(t);
-  document.getElementById('pbSeek').style.background=`linear-gradient(to right,var(--accent) ${v/10}%,var(--line2) ${v/10}%)`;}}
-function pbSeekCommit(v){if(player.duration)player.currentTime=(v/1000)*player.duration;SEEKING=false;}
+function _pbSetPct(p){p=Math.max(0,Math.min(100,p));
+  document.getElementById('pbFill').style.width=p+'%';
+  document.getElementById('pbThumb').style.left=p+'%';}
+function _pbRatio(e){const r=document.getElementById('pbSeek').getBoundingClientRect();
+  return r.width?Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)):0;}
+function pbSeekDown(e){if(!player.src)return;e.preventDefault();SEEKING=true;
+  const move=ev=>{const rt=_pbRatio(ev);_pbSetPct(rt*100);
+    if(player.duration)document.getElementById('pbCur').textContent=pbFmt(rt*player.duration);};
+  const up=ev=>{const rt=_pbRatio(ev);if(player.duration)player.currentTime=rt*player.duration;
+    SEEKING=false;document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);};
+  document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);move(e);}
 function pbUpdate(){const d=player.duration||0,c=player.currentTime||0,p=d?c/d*100:0;
   document.getElementById('pbCur').textContent=pbFmt(c);
   document.getElementById('pbDur').textContent=pbFmt(d);
   document.getElementById('pbBtn').innerHTML=(player.src&&!player.paused)?PAUSE_SVG:PLAY_SVG;
   if(SEEKING)return;                                  // don't fight the user while scrubbing
-  const s=document.getElementById('pbSeek');s.value=d?Math.round(c/d*1000):0;
-  s.style.background=`linear-gradient(to right,var(--accent) ${p}%,var(--line2) ${p}%)`;}
+  _pbSetPct(p);}
 player.addEventListener('timeupdate',pbUpdate);
 player.addEventListener('loadedmetadata',pbUpdate);
 player.addEventListener('durationchange',pbUpdate);

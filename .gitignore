@@ -17,3 +17,4 @@ __pycache__/
 # ---- macOS / misc ----
 .DS_Store
 _iconpreview.png
+CLAUDE.md

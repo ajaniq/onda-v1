@@ -5,6 +5,130 @@ features' behavior** (cross-feature impacts). Newest first.
 
 ---
 
+## Batch 12 — genre Enter + release readiness
+
+- **Enter commits a genre** in the genre cell (works with the autocomplete list): pressing
+  Enter applies the typed/selected genre and refreshes the row, matching the ▾-picker.
+- Final front-end + back-end review before first package (see notes) — no blockers found.
+
+---
+
+## Batch 11 — render is the bottleneck (why buttons were slow)
+
+Root cause: nearly every button calls `render()`, and `render()` had two hidden costs that
+scale badly with library size — so every button got slow, not just scanning.
+
+- **`render()` was O(n²).** It called `TRACKS.indexOf(t)` for every row (a linear scan per
+  row). Replaced with an O(1) `path → index` map (`TIdx`). This is the big one.
+- **The filter read the DOM once *per track*.** `passes()` called `checkedVals()`
+  (`querySelectorAll`) ×3 and `num()` (`getElementById`) ×4 for every track — tens of
+  thousands of DOM queries per render. Now the filter controls are read once into a context
+  object and reused across all tracks.
+- **Autocomplete value lists cached** — `_libValues` no longer rebuilds a set over all tracks
+  on every keystroke; cached per field and cleared when data changes.
+- **`content-visibility:auto` on rows** (`contain-intrinsic-size:auto 56px`) — the browser
+  skips layout/paint for off-screen rows. Progressive enhancement; a no-op where unsupported.
+
+Net: a single `render()` went from O(n²) + O(n×DOM) to O(n), so Show hidden / Reset cols /
+filters / toggles are all fast now. (Reset cols still calls render, but render itself is cheap.)
+
+---
+
+## Batch 10 — front-end performance (large libraries)
+
+- **Selection is O(changed), not O(all rows).** `rowCheck` now updates only the checkboxes
+  that actually changed instead of scanning every row in the DOM. `updateCount` uses the
+  already-computed `CURRENT_ROWS.length` instead of re-running the search/filter predicate
+  over every track on each click. A `path -> track` index (`TByPath`) replaces repeated
+  O(n) `TRACKS.find` / `new Map(...)` calls (used by the USB progress bar and send-to-USB).
+- **Search is debounced** (~140ms) so typing doesn't rebuild thousands of rows per keystroke.
+
+Still the biggest lever for very large libraries: **row virtualization** (render only the
+rows near the viewport). Proposed, not yet implemented — it's the real fix for full re-render
+cost on send/scroll but is a larger, higher-risk change.
+
+---
+
+## Batch 9 — backend performance
+
+Behavior-preserving:
+- **Parallel tag reads during scan** — `scan_folder` overlaps mutagen reads across a small
+  thread pool (I/O-bound). Same library out; big win when adding large folders.
+- **Cover-art cache** — `get_cover` caches extracted artwork by `(path, mtime, size)`
+  (LRU 128), so re-renders/re-scrolls don't re-open and re-parse files. Identical bytes.
+- **`all_tracks` single pass**; **`reconcile_usb`** hoisted `abspath(base)` out of the walk.
+
+Approved architectural changes (A + B + E):
+- **A — In-memory canonical library.** The JSON is parsed once at startup and kept in RAM
+  as the source of truth (all routes run under `LIB_LOCK`). Removes a full disk-read +
+  JSON-parse from every API call. Undo/redo now deep-copy their snapshots before making
+  them canonical, so history can never be corrupted by later edits.
+  *Trade-off:* the running app is authoritative over `music_library.json`; external edits
+  to that file while ONDA is open are ignored until restart.
+- **B — Write-behind saves.** Saves are debounced (~0.8s) and coalesced into a single disk
+  write; a burst of tag edits becomes one write. Flushed on exit (atexit + shutdown) and
+  available synchronously via `save_library(lib, immediate=True)`.
+  *Trade-off:* a hard crash (not a clean quit) within the ~0.8s window could lose the last
+  index change — tags are still embedded in the files themselves, and a rescan rebuilds it.
+- **E — Compact on-disk JSON** (`separators=(",",":")`) — smaller file, faster read/write.
+  *Trade-off:* the file is no longer pretty-printed. `json.load` still reads old files.
+
+Deferred (still need approval): C — partial API payloads (touches `app.html`); D — moving
+the missing-file prune off the per-request path (changes when deleted rows disappear).
+
+---
+
+## Batch 8 — toggle buttons, unhide all, sticky headers (real fix)
+
+### Changed
+- **Toggle controls are now buttons** — "Select all shown", "Show selected", "Show hidden"
+  (toolbar) and "Only genres on active USB" (sidebar) are buttons styled like the others;
+  when active they highlight with an accent border (`.tgl.on`). Uses theme variables, so it
+  adapts to every theme.
+  - Cross-feature: state now lives in JS vars (`SHOW_HIDDEN`, `SHOW_SELECTED`,
+    `GENRE_USB_ONLY`) reflected onto the buttons via `_setTgl`; `updateSelAllBtn()` keeps
+    "Select all shown" lit when every visible row is selected. View history restore and
+    Clear filters update the button states too.
+
+### Added
+- **Unhide all** — toolbar button to unhide every hidden track at once.
+
+### Fixed
+- **Sticky headers (actually sticky now)** — the real culprit was `border-collapse:collapse`,
+  which disables `position:sticky` on `<th>` in the macOS WKWebView. Switched the table to
+  `border-collapse:separate; border-spacing:0`, removed a conflicting duplicate `th` rule,
+  and pinned `thead th` to `top:var(--toolbarH)` (measured after each render / on resize).
+  Column headers now stay on screen while scrolling.
+
+---
+
+## Batch 7 — player, headers, tutorial, drag clarity
+
+### Fixed
+- **Seek dot alignment** — replaced the native range input with a custom track + fill +
+  thumb (`pbSeekDown`/`_pbSetPct`). The dot now sits exactly on the line at every position,
+  in every engine; click or drag to seek, still guarded by `SEEKING`.
+- **Tutorial reopened every launch** — the "seen it" flag now lives in the library JSON
+  (`welcomed`, via `/api/set_welcomed`) so it survives restarts even when the webview's
+  localStorage resets. Falls back to the old localStorage flag for existing installs.
+
+### Added
+- **Hide selected** — toolbar button hides every selected track at once.
+- **Group-drag count badge** — dragging a multi-selection shows a "N tracks" chip as the
+  drag image, and the selected rows tint while dragging, so it's clear what's moving.
+- **Sticky table headers** — column headers (Art, BPM, Rating, …) stay pinned while you
+  scroll. They sit just under the toolbar; the offset (`--toolbarH`) is measured after each
+  render and on resize so it stays correct even when the toolbar wraps.
+- **Collapsible cleanup suggestions** — in Clean genres, the "Suggested cleanups (N)" list
+  collapses/expands via its header.
+- **Only genres on active USB** — sidebar toggle filters the genre list to genres that have
+  tracks on the active USB. Autocomplete/datalist still uses the full genre list.
+
+### Changed
+- Removed the 🧹 emoji from the **Clean genres…** button.
+
+---
+
 ## Batch 6 — export, bulk genre, faster updates, backend reorg
 
 ### Added
