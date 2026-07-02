@@ -305,6 +305,16 @@ def read_file_tags(path):
                         tbpm = tags.get("TBPM")
                         if tbpm:
                             info["bpm"] = str(tbpm.text[0]) if tbpm.text else ""
+                    # WAV/AIFF: the 'easy' reader above doesn't expose these, so read the
+                    # raw ID3 frames as a fallback (harmless for MP3, which already has them).
+                    if not info["genre"]:
+                        tcon = tags.get("TCON")
+                        if tcon and tcon.text:
+                            info["genre"] = str(tcon.text[0])
+                    if not info["artist"]:
+                        tpe1 = tags.get("TPE1")
+                        if tpe1 and tpe1.text:
+                            info["artist"] = str(tpe1.text[0])
                 elif cls in ("MP4", "M4A", "AAC"):
                     if "\xa9cmt" in tags:
                         info["comment"] = str(tags["\xa9cmt"][0])
@@ -327,30 +337,79 @@ def read_file_tags(path):
         pass
     return info
 
+def _repair_container(path):
+    """Heal a WAV/AIFF that a prior version corrupted by prepending an ID3v2 tag
+    to the front of the file (turning 'RIFF'/'FORM' into 'ID3...'). If the real
+    container header sits right after a leading ID3 tag, strip the tag so the file
+    is a valid RIFF/AIFF again. No-op for healthy files. Returns True if repaired."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(10)
+            if len(head) < 10 or head[:3] != b"ID3":
+                return False
+            size = (head[6] & 0x7f) << 21 | (head[7] & 0x7f) << 14 | (head[8] & 0x7f) << 7 | (head[9] & 0x7f)
+            total = 10 + size + (10 if head[5] & 0x10 else 0)   # + optional footer
+            f.seek(total)
+            if f.read(4) not in (b"RIFF", b"FORM"):
+                return False                                     # not our corruption; leave it alone
+            f.seek(total)
+            tmp = path + ".fixtmp"
+            with open(tmp, "wb") as g:
+                shutil.copyfileobj(f, g)
+        os.replace(tmp, path)
+        return True
+    except Exception:
+        try:
+            if os.path.exists(path + ".fixtmp"):
+                os.remove(path + ".fixtmp")
+        except Exception:
+            pass
+        return False
+
+def _apply_id3_frames(tags, genre, artist, title, comment):
+    from mutagen.id3 import COMM, TCON, TPE1, TIT2
+    if genre is not None:
+        tags.delall("TCON")
+        if genre != "":
+            tags.add(TCON(encoding=3, text=[genre]))
+    if artist is not None:
+        tags.delall("TPE1"); tags.add(TPE1(encoding=3, text=[artist]))
+    if title is not None:
+        tags.delall("TIT2"); tags.add(TIT2(encoding=3, text=[title]))
+    tags.delall("COMM")
+    if comment:
+        tags.add(COMM(encoding=3, lang="eng", desc="", text=[comment]))
+
 def write_file_tags(path, genre=None, notes=None, struct=None, artist=None, title=None):
     _require_mutagen()
     import mutagen
-    from mutagen.id3 import ID3, COMM, TCON, TPE1, TIT2, ID3NoHeaderError
+    from mutagen.id3 import ID3, ID3NoHeaderError
     ext = os.path.splitext(path)[1].lower()
     comment = _build_comment(notes or "", struct or {})
     try:
-        if ext in (".mp3", ".aiff", ".aif", ".wav"):
+        if ext == ".mp3":
             try:
                 tags = ID3(path)
             except ID3NoHeaderError:
                 tags = ID3()
-            if genre is not None:
-                tags.delall("TCON")
-                if genre != "":
-                    tags.add(TCON(encoding=3, text=[genre]))
-            if artist is not None:
-                tags.delall("TPE1"); tags.add(TPE1(encoding=3, text=[artist]))
-            if title is not None:
-                tags.delall("TIT2"); tags.add(TIT2(encoding=3, text=[title]))
-            tags.delall("COMM")
-            if comment:
-                tags.add(COMM(encoding=3, lang="eng", desc="", text=[comment]))
+            _apply_id3_frames(tags, genre, artist, title, comment)
             tags.save(path)
+            return True, "ok"
+        if ext in (".wav", ".aiff", ".aif"):
+            # WAV/AIFF are RIFF/FORM containers: the ID3 tag must live INSIDE a chunk,
+            # never be prepended to the file (that corrupts the container and breaks
+            # Serato/Rekordbox). Heal any previously-damaged file, then use the wrapper.
+            _repair_container(path)
+            if ext == ".wav":
+                from mutagen.wave import WAVE
+                audio = WAVE(path)
+            else:
+                from mutagen.aiff import AIFF
+                audio = AIFF(path)
+            if audio.tags is None:
+                audio.add_tags()
+            _apply_id3_frames(audio.tags, genre, artist, title, comment)
+            audio.save()
             return True, "ok"
         audio = mutagen.File(path)
         if audio is None:
@@ -602,6 +661,11 @@ def scan_folder(folder, lib, source=None):
         for name in files:
             if not name.startswith(".") and name.lower().endswith(AUDIO_EXTS):
                 found.append(os.path.join(root, name))
+    # Heal any WAV/AIFF a prior version corrupted (leading ID3 tag) so they read/play
+    # correctly again. Cheap: only reads 10 bytes unless a file is actually damaged.
+    for p in found:
+        if os.path.splitext(p)[1].lower() in (".wav", ".aiff", ".aif"):
+            _repair_container(p)
     seen = set(found)
     # Reading tags (mutagen) is I/O-bound: overlap the reads across a small thread pool.
     # _build_track only READS lib here, so concurrent reads are safe; results are assigned

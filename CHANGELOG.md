@@ -5,6 +5,28 @@ features' behavior** (cross-feature impacts). Newest first.
 
 ---
 
+## Batch 13 — WAV/AIFF corruption fix (important)
+
+**Bug:** tagging a `.wav` (or `.aiff`) wrote the ID3 tag to the *front* of the file, turning
+`RIFF…`/`FORM…` into `ID3…`. That breaks the container, so Serato/Rekordbox — and even
+QuickTime — see a corrupt file.
+
+**Fix:**
+- WAV now writes tags via `mutagen.wave.WAVE` and AIFF via `mutagen.aiff.AIFF`, which store
+  the ID3 tag *inside* the RIFF/AIFF container. Files stay valid; genre/artist/notes/energy/
+  rating all round-trip. (MP3 path unchanged.)
+- `read_file_tags` now also reads genre/artist from the raw ID3 frames (the "easy" reader
+  doesn't expose them for WAV/AIFF).
+- `_repair_container()` heals files a previous version damaged: it strips a leading ID3 tag
+  when a valid `RIFF`/`FORM` header sits right after it. Runs before any WAV/AIFF write and
+  for every WAV/AIFF during **scan / Rescan**, so existing damaged files self-heal.
+
+**For already-corrupted files you've sent to Serato:** Rescan your library in ONDA to heal
+the source files, then re-send them to the USB (the USB copies were made from the broken
+originals, so they need replacing).
+
+---
+
 ## Batch 12 — genre Enter + release readiness
 
 - **Enter commits a genre** in the genre cell (works with the autocomplete list): pressing
